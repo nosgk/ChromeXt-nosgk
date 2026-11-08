@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -927,12 +928,12 @@ private fun StorageCard(
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           modifier = Modifier.padding(top = 8.dp),
       )
-      Text(
-          centralPath,
-          style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-          maxLines = 2,
-          overflow = TextOverflow.Ellipsis,
-      )
+      SelectionContainer {
+        Text(
+            centralPath,
+            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+        )
+      }
       Text(
           formatBytes(centralSize) +
               " · " +
@@ -998,13 +999,14 @@ private fun StorageCard(
               }
             }
           }
-          Text(
-              database.path,
-              style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-              maxLines = 2,
-              overflow = TextOverflow.Ellipsis,
-          )
+          SelectionContainer {
+            Text(
+                database.path,
+                style =
+                    MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
           Text(
               if (!database.checked) stringResource(R.string.settings_storage_unchecked)
               else if (!database.exists) stringResource(R.string.settings_storage_missing)
