@@ -130,7 +130,7 @@ object ScriptDbManager {
    */
   fun refreshIfStale() {
     val now = System.currentTimeMillis()
-    if (now - lastRefresh < 2000) return
+    if (now - lastRefresh < 30_000) return
     lastRefresh = now
     Chrome.IO.submit { syncWithCentral() }
   }
