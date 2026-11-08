@@ -1,6 +1,6 @@
 name=ChromeXt
-version=3.12.0
-versionCode=21
+version=3.13.0
+versionCode=22
 author=nosgk
 description=UserScript and DevTools support for Chromium-based and WebView-based Android browsers
 minApiVersion=100

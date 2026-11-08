@@ -250,4 +250,23 @@
 	<string name="settings_clear_storage_body">Storage of %1$d scripts will be deleted.</string>
 	<string name="settings_restart_sent">Restart requested for %1$s</string>
 	<string name="settings_restart_failed">Root restart failed; opened the app info page for %1$s</string>
+
+	<!-- Script storage -->
+	<string name="settings_storage_title">Script storage</string>
+	<string name="settings_storage_central">Central database</string>
+	<string name="settings_storage_scripts">%1$d scripts</string>
+	<string name="settings_storage_local">Browser local databases</string>
+	<string name="settings_storage_scan">Scan</string>
+	<string name="settings_storage_scanning">Scanning…</string>
+	<string name="settings_storage_import">Import</string>
+	<string name="settings_storage_importing">Importing…</string>
+	<string name="settings_storage_import_all">Import all</string>
+	<string name="settings_storage_unchecked">Not scanned</string>
+	<string name="settings_storage_missing">Not found</string>
+	<string name="settings_storage_modified">modified %1$s</string>
+	<string name="settings_storage_imported">Imported %1$d, skipped %2$d, invalid %3$d</string>
+	<string name="settings_storage_import_failed">Import failed: %1$s</string>
+	<string name="settings_storage_none">No local database to import</string>
+	<string name="settings_storage_no_browser">No supported browser is installed</string>
+	<string name="settings_storage_hint">Scripts installed by the upstream ChromeXt live in each browser's own userscript database. Import them here to see them in this fork.</string>
 </resources>

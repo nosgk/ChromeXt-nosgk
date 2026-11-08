@@ -66,11 +66,12 @@ object CentralBridge {
     return call("updateStorage", extras)?.getBoolean("ok") == true
   }
 
-  fun migrate(records: List<ScriptRecord>): Int {
+  /** Returns the number of inserted rows, or null when the provider is unreachable. */
+  fun migrate(records: List<ScriptRecord>): Int? {
     val array = JSONArray()
     records.forEach { array.put(it.toJson()) }
     val extras = Bundle().apply { putString("records", array.toString()) }
-    return call("migrateLegacyScripts", extras)?.getInt("inserted", 0) ?: 0
+    return call("migrateLegacyScripts", extras)?.getInt("inserted")
   }
 
   /**

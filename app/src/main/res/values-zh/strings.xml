@@ -250,4 +250,23 @@
 	<string name="settings_clear_storage_body">将删除 %1$d 个脚本的 GM 存储。</string>
 	<string name="settings_restart_sent">已请求重启 %1$s</string>
 	<string name="settings_restart_failed">root 重启失败，已打开 %1$s 的应用信息页</string>
+
+	<!-- 脚本存储 -->
+	<string name="settings_storage_title">脚本存储</string>
+	<string name="settings_storage_central">中央数据库</string>
+	<string name="settings_storage_scripts">%1$d 个脚本</string>
+	<string name="settings_storage_local">浏览器本地数据库</string>
+	<string name="settings_storage_scan">扫描</string>
+	<string name="settings_storage_scanning">正在扫描…</string>
+	<string name="settings_storage_import">导入</string>
+	<string name="settings_storage_importing">正在导入…</string>
+	<string name="settings_storage_import_all">全部导入</string>
+	<string name="settings_storage_unchecked">未检查</string>
+	<string name="settings_storage_missing">不存在</string>
+	<string name="settings_storage_modified">修改时间 %1$s</string>
+	<string name="settings_storage_imported">已导入 %1$d 个，跳过 %2$d 个，无效 %3$d 个</string>
+	<string name="settings_storage_import_failed">导入失败：%1$s</string>
+	<string name="settings_storage_none">没有可导入的本地数据库</string>
+	<string name="settings_storage_no_browser">没有安装受支持的浏览器</string>
+	<string name="settings_storage_hint">上游 ChromeXt 安装的脚本保存在各浏览器自己的 userscript 数据库中；在这里导入后即可在本分支看到。</string>
 </resources>

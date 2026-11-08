@@ -146,9 +146,14 @@ object ScriptDbManager {
     applyConfig(CentralBridge.getConfig() ?: emptyMap())
     val prefs = Chrome.getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     if (!prefs.getBoolean(MIGRATED_KEY, false)) {
+      // Only mark the migration as done when the provider actually answered; a failed attempt
+      // (module process not running yet) must be retried, or scripts installed by the upstream
+      // ChromeXt in this browser's local database would never appear in the manager.
       val inserted = CentralBridge.migrate(scripts.map { it.toRecord() })
-      Log.i("Migrated $inserted scripts to the central database")
-      prefs.edit().putBoolean(MIGRATED_KEY, true).apply()
+      if (inserted != null) {
+        Log.i("Migrated $inserted scripts to the central database")
+        prefs.edit().putBoolean(MIGRATED_KEY, true).apply()
+      }
     }
     refreshFromCentral()
   }

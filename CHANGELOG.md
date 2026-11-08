@@ -2,6 +2,17 @@
 
 All notable changes to this fork are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the module's `versionName`.
 
+## [3.13.0] - 2026-11-08
+
+### Added
+
+- Script storage card in settings: the central database path/size/count plus every installed browser's own `userscript` database path, size and modification time.
+- Root-assisted import from browser-local databases (single or all), so scripts installed by the upstream ChromeXt become visible in this fork immediately instead of waiting for the browser to migrate them.
+
+### Fixed
+
+- The browser-side one-time migration marked itself as done even when the provider was unreachable, which permanently hid upstream-installed scripts; the flag is now only set after a successful import.
+
 ## [3.12.0] - 2026-11-08
 
 ### Added
@@ -126,7 +137,8 @@ All notable changes to this fork are documented here. The format follows [Keep a
 - Support for the MVC page menu design.
 - Loading-state tracking for browsers where `mIsLoading` cannot be located.
 
-[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.12.0...HEAD
+[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.13.0...HEAD
+[3.13.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.13.0
 [3.12.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.12.0
 [3.11.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.11.0
 [3.10.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.10.0

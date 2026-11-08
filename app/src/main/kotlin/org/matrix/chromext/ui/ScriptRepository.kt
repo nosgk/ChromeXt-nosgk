@@ -46,6 +46,9 @@ class ScriptRepository(context: Context) {
 
   fun clearOrphanStorage(): Int = store.clearOrphanStorage()
 
+  /** Migration helper used by the browser-database importer: never overwrite an existing row. */
+  fun insertIfAbsent(record: ScriptRecord): Boolean = store.insertIfAbsent(record)
+
   fun close() {
     store.close()
   }

@@ -109,6 +109,9 @@ fun SettingsScreen(
   var confirmClearStorage by remember { mutableStateOf(false) }
   var pendingStorageCount by remember { mutableStateOf(0) }
   var busy by remember { mutableStateOf(false) }
+  var storageDatabases by remember { mutableStateOf<List<LocalScriptDatabase>>(emptyList()) }
+  var scanningStorage by remember { mutableStateOf(false) }
+  var importingPackage by remember { mutableStateOf<String?>(null) }
 
   fun loadTelemetry() {
     scope.launch {
@@ -152,6 +155,72 @@ fun SettingsScreen(
 
   LaunchedEffect(showAllTargets) {
     browsers = withContext(Dispatchers.IO) { loadBrowsers(context, showAllTargets) }
+  }
+
+  LaunchedEffect(browsers) {
+    if (storageDatabases.isEmpty()) {
+      storageDatabases =
+          ScriptStorage.expected(
+              browsers.filter { it.installed }.map { it.packageName to it.label })
+    }
+  }
+
+  fun scanStorage() {
+    if (scanningStorage) return
+    scanningStorage = true
+    scope.launch {
+      storageDatabases = withContext(Dispatchers.IO) { ScriptStorage.scan(storageDatabases) }
+      scanningStorage = false
+    }
+  }
+
+  fun importDatabase(database: LocalScriptDatabase, onDone: () -> Unit = {}) {
+    importingPackage = database.packageName
+    scope.launch {
+      val outcome =
+          withContext(Dispatchers.IO) {
+            ScriptStorage.import(context, database, repository::insertIfAbsent)
+          }
+      importingPackage = null
+      if (outcome.error != null) {
+        onMessage(context.getString(R.string.settings_storage_import_failed, outcome.error))
+      } else {
+        onMessage(
+            context.getString(
+                R.string.settings_storage_imported,
+                outcome.imported,
+                outcome.skipped,
+                outcome.invalid))
+        onChanged()
+        loadTelemetry()
+      }
+      onDone()
+    }
+  }
+
+  fun importAll() {
+    if (importingPackage != null) return
+    if (storageDatabases.none { it.checked }) {
+      // Nothing has been probed yet; scan once and continue.
+      scanningStorage = true
+      scope.launch {
+        storageDatabases = withContext(Dispatchers.IO) { ScriptStorage.scan(storageDatabases) }
+        scanningStorage = false
+        importAll()
+      }
+      return
+    }
+    val pending = storageDatabases.filter { it.exists }
+    if (pending.isEmpty()) {
+      onMessage(context.getString(R.string.settings_storage_none))
+      return
+    }
+    val iterator = pending.iterator()
+    fun next() {
+      if (!iterator.hasNext()) return
+      importDatabase(iterator.next(), onDone = { next() })
+    }
+    next()
   }
 
   fun updateEngine(updated: EngineConfig) {
@@ -222,6 +291,19 @@ fun SettingsScreen(
       }
       item(key = "engine") {
         EngineCard(engine = engine, onChange = { updateEngine(it) })
+      }
+      item(key = "storage") {
+        StorageCard(
+            centralPath = telemetry?.databasePath ?: "",
+            centralSize = telemetry?.databaseSize ?: 0L,
+            centralCount = telemetry?.totalScripts ?: 0,
+            databases = storageDatabases,
+            scanning = scanningStorage,
+            importingPackage = importingPackage,
+            onScan = { scanStorage() },
+            onImport = { importDatabase(it) },
+            onImportAll = { importAll() },
+        )
       }
       item(key = "appearance") {
         AppearanceCard(themeMode = themeMode, onThemeModeChange = onThemeModeChange)
@@ -820,6 +902,142 @@ private fun openAppInfo(context: Context, packageName: String) {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
   }
 }
+
+@Composable
+private fun StorageCard(
+    centralPath: String,
+    centralSize: Long,
+    centralCount: Int,
+    databases: List<LocalScriptDatabase>,
+    scanning: Boolean,
+    importingPackage: String?,
+    onScan: () -> Unit,
+    onImport: (LocalScriptDatabase) -> Unit,
+    onImportAll: () -> Unit,
+) {
+  Card(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = Modifier.padding(14.dp)) {
+      Text(
+          stringResource(R.string.settings_storage_title),
+          style = MaterialTheme.typography.titleMedium,
+      )
+      Text(
+          stringResource(R.string.settings_storage_central),
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.padding(top = 8.dp),
+      )
+      Text(
+          centralPath,
+          style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+          maxLines = 2,
+          overflow = TextOverflow.Ellipsis,
+      )
+      Text(
+          formatBytes(centralSize) +
+              " · " +
+              stringResource(R.string.settings_storage_scripts, centralCount),
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            stringResource(R.string.settings_storage_local),
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.weight(1f),
+        )
+        TextButton(onClick = onScan, enabled = !scanning) {
+          Text(
+              stringResource(
+                  if (scanning) R.string.settings_storage_scanning
+                  else R.string.settings_storage_scan))
+        }
+        TextButton(
+            onClick = onImportAll,
+            enabled = importingPackage == null && databases.any { it.exists },
+        ) {
+          Text(stringResource(R.string.settings_storage_import_all))
+        }
+      }
+      if (databases.isEmpty()) {
+        Text(
+            stringResource(R.string.settings_storage_no_browser),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+      databases.forEach { database ->
+        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text(database.label, style = MaterialTheme.typography.bodyMedium)
+              Text(
+                  database.packageName,
+                  style =
+                      MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            }
+            if (database.checked && !database.exists) {
+              Text(
+                  stringResource(R.string.settings_storage_missing),
+                  style = MaterialTheme.typography.labelSmall,
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+            } else {
+              TextButton(
+                  onClick = { onImport(database) },
+                  enabled = database.exists && importingPackage == null,
+              ) {
+                Text(
+                    stringResource(
+                        if (importingPackage == database.packageName)
+                            R.string.settings_storage_importing
+                        else R.string.settings_storage_import))
+              }
+            }
+          }
+          Text(
+              database.path,
+              style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+              maxLines = 2,
+              overflow = TextOverflow.Ellipsis,
+          )
+          Text(
+              if (!database.checked) stringResource(R.string.settings_storage_unchecked)
+              else if (!database.exists) stringResource(R.string.settings_storage_missing)
+              else
+                  formatBytes(database.size) +
+                      " · " +
+                      stringResource(
+                          R.string.settings_storage_modified,
+                          formatTime(database.lastModified)),
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
+      Text(
+          stringResource(R.string.settings_storage_hint),
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.padding(top = 6.dp),
+      )
+    }
+  }
+}
+
+private fun formatTime(value: Long): String =
+    if (value <= 0L) ""
+    else
+        runCatching {
+              java.text.DateFormat.getDateTimeInstance(
+                      java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
+                  .format(java.util.Date(value))
+            }
+            .getOrDefault("")
 
 private fun formatBytes(bytes: Long): String =
     when {
