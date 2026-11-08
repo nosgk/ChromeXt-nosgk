@@ -22,8 +22,14 @@ typealias Hooker = (param: HookParam) -> Unit
  */
 class HookParam internal constructor(private val chain: XposedInterface.Chain) {
 
-  /** Mutable copy: assignments here are replayed through `proceed(args)` by the helper. */
-  val args: MutableList<Any?> = ArrayList<Any?>(chain.args)
+  /**
+   * Mutable copy: assignments here are replayed through `proceed(args)` by the helper.
+   *
+   * The element type is non-null on purpose. The legacy `MethodHookParam.args` was an `Object[]`
+   * seen as `Array<Any!>` by Kotlin, and every existing hook site was written against that; a
+   * nullable list would force `!!` into dozens of unrelated call sites.
+   */
+  val args: MutableList<Any> = ArrayList<Any>(chain.args)
 
   /** The receiver. All hooks installed by this module are instance methods or constructors. */
   val thisObject: Any = chain.thisObject!!

@@ -184,13 +184,18 @@ class MainHook : XposedModule() {
   private fun reportHookedApp(packageName: String, info: ApplicationInfo) {
     if (reported) return
     reported = true
+    val packageManager = currentApplication()?.packageManager
     val label =
         runCatching {
-              val pm = currentApplication()?.packageManager
-              if (pm == null) "" else info.loadLabel(pm).toString()
+              if (packageManager == null) "" else info.loadLabel(packageManager).toString()
             }
             .getOrDefault("")
-    val versionName = info.versionName ?: ""
+    val versionName =
+        runCatching {
+              if (packageManager == null) ""
+              else packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+            }
+            .getOrDefault("")
     Chrome.IO.submit { CentralBridge.reportHookedApp(packageName, label, versionName) }
   }
 
