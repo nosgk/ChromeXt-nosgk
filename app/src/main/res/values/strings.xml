@@ -268,5 +268,5 @@
 	<string name="settings_storage_import_failed">Import failed: %1$s</string>
 	<string name="settings_storage_none">No local database to import</string>
 	<string name="settings_storage_no_browser">No supported browser is installed</string>
-	<string name="settings_storage_hint">Scripts installed by the upstream ChromeXt live in each browser's own userscript database. Import them here to see them in this fork.</string>
+	<string name="settings_storage_hint">Scripts installed by the upstream ChromeXt live in the userscript database of each browser. Import them here to see them in this fork.</string>
 </resources>

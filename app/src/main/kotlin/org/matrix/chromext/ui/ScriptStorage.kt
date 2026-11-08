@@ -57,11 +57,11 @@ object ScriptStorage {
           append("for p in ")
           databases.joinTo(this, " ") { it.packageName }
           append("; do for base in /data/user/0 /data/user_de/0 /data/data; do ")
-          append("f=$base/$p/databases/$DB_NAME; ")
-          append("if [ -f \"$f\" ]; then ")
-          append("s=$(stat -c %s \"$f\" 2>/dev/null || echo 0); ")
-          append("t=$(stat -c %Y \"$f\" 2>/dev/null || echo 0); ")
-          append("echo \"$f|$s|$t\"; fi; done; done")
+          append("f=\$base/\$p/databases/$DB_NAME; ")
+          append("if [ -f \"\$f\" ]; then ")
+          append("s=\$(stat -c %s \"\$f\" 2>/dev/null || echo 0); ")
+          append("t=\$(stat -c %Y \"\$f\" 2>/dev/null || echo 0); ")
+          append("echo \"\$f|\$s|\$t\"; fi; done; done")
         }
     val output = runSu(command, 8) ?: return databases.map { it.copy(checked = true, exists = false) }
     val found = mutableMapOf<String, Triple<String, Long, Long>>()
