@@ -62,6 +62,7 @@ object ContextMenuHook : BaseHook() {
     findMethod(cls) { name == "onCreateActionMode" }
         // public abstract boolean onCreateActionMode (ActionMode mode, Menu menu)
         .hookAfter {
+          if (!MenuEntryPolicy.erudaEnabled) return@hookAfter
           val url = Chrome.getUrl()
           val mode = it.args[0] as ActionMode
           val menu = it.args[1] as Menu
@@ -150,6 +151,7 @@ object ContextMenuHook : BaseHook() {
       val createImageView = findMethod(miuiTextSelectResources) { name == "createImageView" }
       findMethod(miuiFloatingSelectPopupWindow) { name == "showPopup" }
           .hookAfter {
+            if (!MenuEntryPolicy.erudaEnabled) return@hookAfter
             val popupWindow = it.thisObject
             val context = mContext.get(popupWindow) as Context
             val view = mParent.get(popupWindow)

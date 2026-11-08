@@ -62,6 +62,7 @@ object PageInfoHook : BaseHook() {
 
     fun insertRow(host: Any) {
       if (inserted) return
+      if (!MenuEntryPolicy.erudaEnabled) return
       val parent = firstRow?.getParent() as? ViewGroup ?: return
       val url = Chrome.getUrl() ?: return
       if (isChromeScheme(url)) return

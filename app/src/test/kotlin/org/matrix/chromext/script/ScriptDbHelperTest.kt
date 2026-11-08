@@ -28,12 +28,13 @@ class ScriptDbHelperTest {
   }
 
   @Test
-  fun createsTheV11Schema() {
+  fun createsTheV12Schema() {
     context.deleteDatabase(ScriptDbHelper.DATABASE_NAME)
     val helper = ScriptDbHelper(context)
     val db = helper.writableDatabase
     val columns = columnsOf(db, "script")
     val appColumns = columnsOf(db, "hooked_app")
+    val configColumns = columnsOf(db, "config")
     assertEquals(ScriptDbHelper.DATABASE_VERSION, db.version)
     helper.close()
     assertTrue(
@@ -56,6 +57,7 @@ class ScriptDbHelperTest {
             )))
     assertTrue(
         appColumns.containsAll(setOf("package_name", "label", "version_name", "last_seen")))
+    assertTrue(configColumns.containsAll(setOf("key", "value")))
   }
 
   @Test
@@ -75,7 +77,7 @@ class ScriptDbHelperTest {
 
     val helper = ScriptDbHelper(context)
     val db = helper.readableDatabase
-    assertEquals(11, db.version)
+    assertEquals(12, db.version)
     db.rawQuery("SELECT id, storage, enabled, sort_order, apps FROM script ORDER BY id", null).use {
         cursor ->
       assertTrue(cursor.moveToFirst())
@@ -122,7 +124,7 @@ class ScriptDbHelperTest {
 
     val helper = ScriptDbHelper(context)
     val db = helper.readableDatabase
-    assertEquals(11, db.version)
+    assertEquals(12, db.version)
     assertTrue(columnsOf(db, "script").contains("apps"))
     assertTrue(columnsOf(db, "hooked_app").contains("package_name"))
     db.rawQuery("SELECT apps FROM script WHERE id = 'a:kept'", null).use { cursor ->

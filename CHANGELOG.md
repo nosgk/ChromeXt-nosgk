@@ -2,6 +2,31 @@
 
 All notable changes to this fork are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the module's `versionName`.
 
+## [3.11.0] - 2026-11-08
+
+### Added
+
+- Settings rebuilt as a responsive workbench: `NavigationRail` on wide screens, a two-column staggered card grid, and every card fills its cell.
+- Live telemetry card: provider reachability with a ping round-trip, schema version, database path/size, script payload counts, GM storage size and hooked-app count.
+- Installed-host card driven by `PackageManager` (label, package, version, icon), with a per-app root restart (`su -c am force-stop … ; monkey …`) that falls back to the system app-info page.
+- Engine card backed by the new central `config` table: persistent GM storage, CSP rule injection, forced WebView debugging, Eruda menu injection and the privileged `GM.ChromeXt` dispatch.
+- Data card: side-by-side export/import, SQLite `VACUUM` with reclaimed bytes, orphan GM storage cleanup, and a danger zone with an explicit script count.
+- Apps screen redesigned as a per-app workbench: app icons, package names, total/enabled script counts, a global-scripts entry, search, and an "all apps" filter.
+- The apps screen reads the framework scope through `su` when available, so scoped-but-not-yet-hooked apps show up as "scoped, not hooked yet".
+- Pull-to-refresh on the scripts and apps screens.
+
+### Changed
+
+- Activation detection is now reliable: every hooked process reports through the system context at `onPackageReady`, and the provider records any authorized caller, so a browser using the central database can no longer show as "not hooked".
+- Schema v12 adds the `config` table; `hooked_app` updates preserve a known label/version when a plain provider call only refreshes `last_seen`.
+- Creating a script from an app filter pre-scopes it to that app.
+- `GM.ChromeXt` is only exposed when the central engine switch allows it (and the script still has to declare the grant).
+
+### Fixed
+
+- An app that was clearly hooked could still be listed as "installed, not hooked yet" because the report was lost when the provider was not running.
+- Settings cards no longer collapse to content width or stretch buttons across the whole tablet screen.
+
 ## [3.10.0] - 2026-11-08
 
 ### Added
@@ -86,7 +111,8 @@ All notable changes to this fork are documented here. The format follows [Keep a
 - Support for the MVC page menu design.
 - Loading-state tracking for browsers where `mIsLoading` cannot be located.
 
-[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.10.0...HEAD
+[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.11.0...HEAD
+[3.11.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.11.0
 [3.10.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.10.0
 [3.9.1]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.9.0...v3.9.1
 [3.9.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.9.0

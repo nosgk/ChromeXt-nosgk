@@ -19,6 +19,15 @@ object CentralBridge {
 
   fun isAvailable(): Boolean = call("ping")?.getBoolean("available") == true
 
+  fun getConfig(): Map<String, String>? {
+    val json = call("getConfig")?.getString("config") ?: return null
+    return runCatching {
+      val objectValue = org.json.JSONObject(json)
+      objectValue.keys().asSequence().associateWith { objectValue.optString(it) }
+    }
+        .getOrNull()
+  }
+
   fun queryRecords(): List<ScriptRecord>? {
     val bundle = call("queryScripts") ?: return null
     val json = bundle.getString("records") ?: return null

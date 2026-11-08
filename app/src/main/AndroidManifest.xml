@@ -36,6 +36,8 @@
     <!-- The manager process checks script update URLs; under LSPosed it does not inherit the
          browser's network permission. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- The apps screen lists installed apps so scripts can be scoped to any hooked host. -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name">

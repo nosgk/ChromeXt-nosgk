@@ -164,4 +164,67 @@
 	<string name="install_version_diff">v%1$s → v%2$s</string>
 	<string name="install_error_read">Cannot read the script</string>
 	<string name="install_error_invalid">Invalid UserScript</string>
+
+	<!-- Apps workbench -->
+	<string name="action_refresh">Refresh</string>
+	<string name="apps_search_hint">Search app name or package</string>
+	<string name="apps_filter_hooked">Hooked</string>
+	<string name="apps_filter_all">All apps</string>
+	<string name="apps_global">Global scripts</string>
+	<string name="apps_global_hint">Runs in every hooked app</string>
+	<string name="apps_script_counts">%1$d scripts · %2$d on</string>
+	<string name="apps_status_active">Active</string>
+	<string name="apps_status_scoped">Scoped, not hooked yet</string>
+	<string name="apps_status_missing">Not installed</string>
+	<string name="apps_status_out_of_scope">Not in scope</string>
+	<string name="apps_scope_unavailable">Could not read the LSPosed scope; showing reported apps and known browsers. Pull to retry.</string>
+	<string name="scripts_global_title">Global scripts</string>
+
+	<!-- Settings workbench -->
+	<string name="settings_telemetry">Engine telemetry</string>
+	<string name="settings_status_active">ACTIVE</string>
+	<string name="settings_status_fallback">FALLBACK</string>
+	<string name="settings_metric_ipc">IPC channel</string>
+	<string name="settings_metric_schema">SQLite schema</string>
+	<string name="settings_metric_payload">Script payload</string>
+	<string name="settings_metric_module">Module</string>
+	<string name="settings_ipc_ready">ContentProvider ready</string>
+	<string name="settings_ipc_fallback">Local DB fallback</string>
+	<string name="settings_ping">Ping</string>
+	<string name="settings_storage_size">GM storage %1$s</string>
+	<string name="settings_hooked_apps">%1$d hooked apps</string>
+	<string name="settings_browsers_installed">Installed hosts</string>
+	<string name="settings_browsers_show_all">Show all targets</string>
+	<string name="settings_browsers_show_installed">Installed only</string>
+	<string name="settings_browsers_none">No supported browser is installed</string>
+	<string name="settings_browser_version">v%1$s</string>
+	<string name="settings_browser_restart">Restart</string>
+	<string name="settings_browser_not_installed">not installed</string>
+	<string name="settings_engine">Injection engine</string>
+	<string name="settings_engine_keep_storage">Persist GM storage</string>
+	<string name="settings_engine_keep_storage_hint">Keep GM_setValue data when a script is updated or reinstalled</string>
+	<string name="settings_engine_csp">CSP rule injection</string>
+	<string name="settings_engine_csp_hint">Inject the configured CSP overrides for matched origins; off ignores every override</string>
+	<string name="settings_engine_webview">Force WebView debugging</string>
+	<string name="settings_engine_webview_hint">Call setWebContentsDebuggingEnabled(true) on hooked WebView apps for ADB inspection</string>
+	<string name="settings_engine_eruda">Inject Eruda console</string>
+	<string name="settings_engine_eruda_hint">Show the Eruda entry in page menus and use the browser-local cache</string>
+	<string name="settings_engine_privileged">Allow privileged dispatch</string>
+	<string name="settings_engine_privileged_hint">Let scripts declaring @grant GM.ChromeXt call ChromeXt.dispatch</string>
+	<string name="settings_engine_pending">Changes apply when the browser next syncs</string>
+	<string name="settings_data">Data and backup</string>
+	<string name="settings_export_short">Export (.zip)</string>
+	<string name="settings_import_short">Import (.zip)</string>
+	<string name="settings_vacuum">Compact database</string>
+	<string name="settings_vacuum_hint">Run SQLite VACUUM and reclaim free pages</string>
+	<string name="settings_clear_storage">Clear orphan GM storage</string>
+	<string name="settings_clear_storage_hint">Delete values for scripts that no longer declare a storage API</string>
+	<string name="settings_danger">Danger zone</string>
+	<string name="settings_delete_all_count">All %1$d scripts will be deleted. This cannot be undone.</string>
+	<string name="settings_vacuum_done">Reclaimed %1$s</string>
+	<string name="settings_storage_cleared">Cleared storage for %1$d scripts</string>
+	<string name="settings_clear_storage_title">Clear orphan GM storage?</string>
+	<string name="settings_clear_storage_body">Storage of %1$d scripts will be deleted.</string>
+	<string name="settings_restart_sent">Restart requested for %1$s</string>
+	<string name="settings_restart_failed">Root restart failed; opened the app info page for %1$s</string>
 </resources>

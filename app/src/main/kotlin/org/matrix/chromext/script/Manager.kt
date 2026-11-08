@@ -2,11 +2,13 @@ package org.matrix.chromext.script
 
 import android.content.Context
 import android.net.Uri
+import android.webkit.WebView
 import java.util.concurrent.CopyOnWriteArrayList
 import org.json.JSONArray
 import org.json.JSONObject
 import org.matrix.chromext.Chrome
 import org.matrix.chromext.bridge.JsBridge
+import org.matrix.chromext.menu.MenuEntryPolicy
 import org.matrix.chromext.utils.Log
 import org.matrix.chromext.utils.invokeMethod
 import org.matrix.chromext.utils.isChromeXtFrontEnd
@@ -30,6 +32,9 @@ object ScriptDbManager {
   var keepStorage: Boolean
 
   @Volatile private var lastRefresh = 0L
+
+  /** Engine switches pulled from the central config table; defaults match pre-3.10 behavior. */
+  @Volatile var engine = EngineConfig()
 
   init {
     val ctx = Chrome.getContext()
@@ -138,6 +143,7 @@ object ScriptDbManager {
 
   private fun syncWithCentral() {
     if (!CentralBridge.isAvailable()) return
+    applyConfig(CentralBridge.getConfig() ?: emptyMap())
     val prefs = Chrome.getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
     if (!prefs.getBoolean(MIGRATED_KEY, false)) {
       val inserted = CentralBridge.migrate(scripts.map { it.toRecord() })
@@ -145,6 +151,20 @@ object ScriptDbManager {
       prefs.edit().putBoolean(MIGRATED_KEY, true).apply()
     }
     refreshFromCentral()
+  }
+
+  /**
+   * Applies the central engine switches. The manager process owns the values; browsers only read
+   * them, so a change takes effect on the next sync (page load / 30 s throttle).
+   */
+  private fun applyConfig(values: Map<String, String>) {
+    val updated = EngineConfig.from(values)
+    if (updated == engine) return
+    engine = updated
+    keepStorage = updated.keepStorage
+    MenuEntryPolicy.erudaEnabled = updated.erudaEnabled
+    runCatching { WebView.setWebContentsDebuggingEnabled(updated.webViewDebug) }
+        .onFailure { Log.ex(it) }
   }
 
   private fun fixEncoding(url: String, path: String, codes: MutableList<String>) {
@@ -191,7 +211,7 @@ object ScriptDbManager {
     } else if (!isChromeXtFrontEnd(url)) {
       val origin = parseOrigin(url)
       if (origin != null) {
-        if (cspRules.contains(origin)) {
+        if (engine.cspRules && cspRules.contains(origin)) {
           runCatching {
             val rule = JSONArray(cspRules.get(origin))
             codes.add("Symbol.ChromeXt.cspRules.push(...${rule});${Local.cspRule}")

@@ -38,8 +38,14 @@ class ScriptContentProvider : ContentProvider() {
     }
     val db = store ?: return null
     val bundle = extras ?: Bundle()
+    recordCaller()
     return when (method) {
       "ping" -> Bundle().apply { putBoolean("available", true) }
+      "getConfig" -> {
+        val json = JSONObject()
+        db.config().forEach { (key, value) -> json.put(key, value) }
+        Bundle().apply { putString("config", json.toString()) }
+      }
       "queryScripts" -> {
         val array = JSONArray()
         db.records().forEach { array.put(it.toJson()) }
@@ -82,6 +88,20 @@ class ScriptContentProvider : ContentProvider() {
       }
       else -> null
     }
+  }
+
+  /**
+   * Any authorized browser that talks to the provider is, by definition, running the module. Record
+   * it so the manager's app list reflects reality even when the explicit report was lost (provider
+   * not started yet, process killed before the IO task ran).
+   */
+  private fun recordCaller() {
+    val uid = Binder.getCallingUid()
+    if (uid == Process.myUid()) return
+    val packages = context?.packageManager?.getPackagesForUid(uid) ?: return
+    val packageName =
+        packages.firstOrNull { it in BrowserCatalog.xposedScope } ?: packages.firstOrNull() ?: return
+    store?.reportHookedApp(packageName, "", "")
   }
 
   private fun reportHookedApp(bundle: Bundle): Bundle {

@@ -51,6 +51,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -98,10 +99,13 @@ fun ScriptListScreen(
     modifier: Modifier,
     scripts: List<Script>,
     loading: Boolean,
+    refreshing: Boolean,
     loadError: Boolean,
     activeUrl: String?,
     appFilter: String?,
     appLabel: String?,
+    globalOnly: Boolean,
+    defaultApps: List<String>,
     updates: Map<String, UpdateInfo>,
     checkingUpdates: Boolean,
     onClearAppFilter: () -> Unit,
@@ -114,6 +118,7 @@ fun ScriptListScreen(
     onCheckUpdates: () -> Unit,
     onApplyUpdate: (Script, UpdateInfo) -> Unit,
     onRetry: () -> Unit,
+    onRefresh: () -> Unit,
 ) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
@@ -149,10 +154,12 @@ fun ScriptListScreen(
     }
   }
 
-  val visible = remember(scripts, searchBlobs, debouncedQuery, filter, sort, appFilter, activeUrl) {
+  val visible = remember(
+      scripts, searchBlobs, debouncedQuery, filter, sort, appFilter, globalOnly, activeUrl) {
     val needle = debouncedQuery.trim().lowercase()
     scripts
         .asSequence()
+        .filter { !globalOnly || it.apps.isEmpty() }
         .filter { appFilter == null || it.appliesTo(appFilter) }
         .filter { needle.isEmpty() || searchBlobs[it.id]?.contains(needle) == true }
         .filter {
@@ -174,10 +181,11 @@ fun ScriptListScreen(
 
   val enabledCount = scripts.count { it.enabled }
   val title =
-      if (appFilter != null && appLabel != null) {
-        stringResource(R.string.apps_filter_title, appLabel)
-      } else {
-        stringResource(R.string.scripts_title, enabledCount, scripts.size)
+      when {
+        globalOnly -> stringResource(R.string.scripts_global_title)
+        appFilter != null && appLabel != null ->
+            stringResource(R.string.apps_filter_title, appLabel)
+        else -> stringResource(R.string.scripts_title, enabledCount, scripts.size)
       }
 
   val importLauncher =
@@ -224,7 +232,24 @@ fun ScriptListScreen(
                 }
               },
           )
-          if (appFilter != null && appLabel != null) {
+          if (globalOnly) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+              AssistChip(
+                  onClick = onClearAppFilter,
+                  label = { Text(stringResource(R.string.scripts_global_title)) },
+                  trailingIcon = {
+                    Icon(
+                        Icons.Default.Clear,
+                        contentDescription = stringResource(R.string.empty_clear_filters),
+                        modifier = Modifier.size(16.dp),
+                    )
+                  },
+              )
+            }
+          } else if (appFilter != null && appLabel != null) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -315,7 +340,7 @@ fun ScriptListScreen(
                 text = { Text(stringResource(R.string.fab_new)) },
                 onClick = {
                   showFabMenu = false
-                  onNew(newScriptTemplate())
+                  onNew(newScriptTemplate(defaultApps))
                 },
             )
             DropdownMenuItem(
@@ -342,7 +367,12 @@ fun ScriptListScreen(
         }
       },
   ) { padding ->
-    Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+    PullToRefreshBox(
+        isRefreshing = refreshing,
+        onRefresh = onRefresh,
+        modifier = Modifier.padding(padding).fillMaxSize(),
+    ) {
+      Box(modifier = Modifier.fillMaxSize()) {
       when {
         loading && scripts.isEmpty() -> SkeletonGrid()
         loadError && scripts.isEmpty() -> ErrorState(onRetry)
@@ -359,7 +389,7 @@ fun ScriptListScreen(
                 onAction = {
                   query = ""
                   filter = ScriptFilter.ALL
-                  if (appFilter != null) onClearAppFilter()
+                  if (appFilter != null || globalOnly) onClearAppFilter()
                 },
             )
         else ->
@@ -383,6 +413,7 @@ fun ScriptListScreen(
               }
             }
       }
+    }
     }
   }
 
@@ -715,7 +746,7 @@ private fun readScriptFromUrl(address: String): String? {
       .getOrNull()
 }
 
-private fun newScriptTemplate(): Script {
+private fun newScriptTemplate(defaultApps: List<String> = emptyList()): Script {
   val stamp = System.currentTimeMillis()
   val name = "New Script $stamp"
   val meta =
@@ -739,6 +770,7 @@ private fun newScriptTemplate(): Script {
       code = "\n",
       storage = null,
       noframes = false,
+      apps = defaultApps,
       lastUpdated = stamp,
       version = "1.0",
       description = "A new UserScript",

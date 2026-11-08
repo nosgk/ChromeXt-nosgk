@@ -75,6 +75,15 @@ private const val SQL_CREATE_HOOKED_APPS =
     );
     """
 
+/** Central key/value store for engine switches shared by the manager and the browser processes. */
+private const val SQL_CREATE_CONFIG =
+    """
+    CREATE TABLE IF NOT EXISTS config (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT NOT NULL DEFAULT ''
+    );
+    """
+
 private const val SQL_CREATE_ENTRIES =
     """
     CREATE TABLE script (
@@ -101,6 +110,7 @@ class ScriptDbHelper(context: Context) :
   override fun onCreate(db: SQLiteDatabase) {
     db.execSQL(SQL_CREATE_ENTRIES)
     db.execSQL(SQL_CREATE_HOOKED_APPS)
+    db.execSQL(SQL_CREATE_CONFIG)
   }
 
   override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -143,6 +153,10 @@ class ScriptDbHelper(context: Context) :
       addColumn(db, "apps", "TEXT NOT NULL DEFAULT ''")
       db.execSQL(SQL_CREATE_HOOKED_APPS)
     }
+
+    if (oldVersion < 12) {
+      db.execSQL(SQL_CREATE_CONFIG)
+    }
   }
 
   private fun addColumn(db: SQLiteDatabase, name: String, definition: String) {
@@ -157,7 +171,7 @@ class ScriptDbHelper(context: Context) :
   }
 
   companion object {
-    const val DATABASE_VERSION = 11
+    const val DATABASE_VERSION = 12
     const val DATABASE_NAME = "userscript"
   }
 }

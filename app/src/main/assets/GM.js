@@ -1236,7 +1236,7 @@ GM.bootstrap = () => {
     }
   });
 
-  if (grants.includes("GM.ChromeXt")) {
+  if (GM.privileged && grants.includes("GM.ChromeXt")) {
     GM.ChromeXt = ChromeXt;
   }
 

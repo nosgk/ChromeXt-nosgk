@@ -4,6 +4,10 @@ import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
@@ -13,6 +17,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationRail
+import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -28,8 +34,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -50,6 +58,8 @@ sealed interface Screen {
   data class Edit(val script: Script) : Screen
 }
 
+private data class Destination(val screen: Screen, val icon: ImageVector, val label: Int)
+
 @Composable
 fun ChromeXtApp(
     activeUrl: String?,
@@ -65,11 +75,15 @@ fun ChromeXtApp(
 
   var scripts by remember { mutableStateOf<List<Script>>(emptyList()) }
   var hookedApps by remember { mutableStateOf<List<HookedApp>>(emptyList()) }
-  var installedApps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
+  var apps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
+  var scopeAvailable by remember { mutableStateOf(false) }
+  var includeAllApps by rememberSaveable { mutableStateOf(false) }
   var loading by remember { mutableStateOf(true) }
+  var refreshing by remember { mutableStateOf(false) }
   var loadError by remember { mutableStateOf(false) }
   var screen by remember { mutableStateOf<Screen>(Screen.List) }
   var appFilter by rememberSaveable { mutableStateOf<String?>(null) }
+  var globalOnly by rememberSaveable { mutableStateOf(false) }
   var reload by remember { mutableIntStateOf(0) }
   var updates by remember { mutableStateOf<Map<String, UpdateInfo>>(emptyMap()) }
   var checkingUpdates by remember { mutableStateOf(false) }
@@ -85,17 +99,24 @@ fun ChromeXtApp(
     val loaded =
         withContext(Dispatchers.IO) {
           runCatching {
-            Triple(repository.load(), repository.hookedApps(), loadInstalledBrowsers(context))
+            val loadedScripts = repository.load()
+            val loadedHooked = repository.hookedApps()
+            val loadedApps = loadApps(context, loadedHooked, loadedScripts)
+            val scopeRead = runCatching { LsposedScope.read(context) }.getOrDefault(emptySet())
+            Triple(loadedScripts, loadedHooked, loadedApps) to scopeRead
           }
         }
     loaded
-        .onSuccess { (loadedScripts, loadedApps, loadedInstalled) ->
+        .onSuccess { (payload, scopeRead) ->
+          val (loadedScripts, loadedHooked, loadedApps) = payload
           scripts = loadedScripts
-          hookedApps = loadedApps
-          installedApps = loadedInstalled
+          hookedApps = loadedHooked
+          apps = loadedApps
+          scopeAvailable = scopeRead.isNotEmpty()
         }
         .onFailure { loadError = true }
     loading = false
+    refreshing = false
   }
 
   LaunchedEffect(editId, scripts) {
@@ -103,6 +124,12 @@ fun ChromeXtApp(
       openedEditId = editId
       scripts.firstOrNull { it.id == editId }?.let { screen = Screen.Edit(it) }
     }
+  }
+
+  fun refresh() {
+    refreshing = true
+    LsposedScope.invalidate()
+    reload += 1
   }
 
   fun toggle(id: String, enabled: Boolean) {
@@ -195,111 +222,145 @@ fun ChromeXtApp(
     }
   }
 
-  val knownApps = remember(installedApps, hookedApps) {
-    (installedApps + hookedApps.map { AppEntry(it.packageName, it.label) })
-        .filter { it.packageName.isNotBlank() }
+  val knownApps = remember(apps) {
+    apps
+        .filter { it.installed }
+        .map { AppEntry(it.packageName, it.label, it.versionName, null, false, true, false) }
         .distinctBy { it.packageName }
         .sortedBy { it.label.lowercase() }
   }
 
   val appLabel =
       appFilter?.let { packageName ->
-        knownApps.firstOrNull { it.packageName == packageName }?.label?.ifBlank { null }
-            ?: packageName
+        apps.firstOrNull { it.packageName == packageName }?.label ?: packageName
       }
 
   BackHandler(enabled = screen !is Screen.List) { screen = Screen.List }
 
-  Scaffold(
-      snackbarHost = { SnackbarHost(snackbar) },
-      bottomBar = {
-        if (screen !is Screen.Edit) {
-          NavigationBar {
-            NavigationBarItem(
-                selected = screen is Screen.List,
-                onClick = { screen = Screen.List },
-                icon = { Icon(Icons.Default.List, contentDescription = null) },
-                label = { Text(stringResource(R.string.nav_scripts)) },
-            )
-            NavigationBarItem(
-                selected = screen is Screen.Apps,
-                onClick = { screen = Screen.Apps },
-                icon = { Icon(Icons.Default.Build, contentDescription = null) },
-                label = { Text(stringResource(R.string.nav_apps)) },
-            )
-            NavigationBarItem(
-                selected = screen is Screen.Settings,
-                onClick = { screen = Screen.Settings },
-                icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                label = { Text(stringResource(R.string.nav_settings)) },
-            )
-            NavigationBarItem(
-                selected = screen is Screen.About,
-                onClick = { screen = Screen.About },
-                icon = { Icon(Icons.Default.Info, contentDescription = null) },
-                label = { Text(stringResource(R.string.nav_about)) },
+  val destinations =
+      listOf(
+          Destination(Screen.List, Icons.Default.List, R.string.nav_scripts),
+          Destination(Screen.Apps, Icons.Default.Build, R.string.nav_apps),
+          Destination(Screen.Settings, Icons.Default.Settings, R.string.nav_settings),
+          Destination(Screen.About, Icons.Default.Info, R.string.nav_about),
+      )
+
+  BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+    val wide = maxWidth >= 600.dp
+    Row(modifier = Modifier.fillMaxSize()) {
+      if (wide) {
+        NavigationRail(modifier = Modifier.fillMaxHeight()) {
+          destinations.forEach { destination ->
+            NavigationRailItem(
+                selected = screen::class == destination.screen::class,
+                onClick = {
+                  if (destination.screen is Screen.List) {
+                    globalOnly = false
+                    appFilter = null
+                  }
+                  screen = destination.screen
+                },
+                icon = { Icon(destination.icon, contentDescription = null) },
+                label = { Text(stringResource(destination.label)) },
             )
           }
         }
-      },
-  ) { padding ->
-    Crossfade(targetState = screen, animationSpec = tween(180), label = "screen") { current ->
-      when (current) {
-        Screen.List ->
-            ScriptListScreen(
-                modifier = Modifier.padding(padding),
-                scripts = scripts,
-                loading = loading,
-                loadError = loadError,
-                activeUrl = activeUrl,
-                appFilter = appFilter,
-                appLabel = appLabel,
-                updates = updates,
-                checkingUpdates = checkingUpdates,
-                onClearAppFilter = { appFilter = null },
-                onToggle = { id, enabled -> toggle(id, enabled) },
-                onDelete = { delete(it) },
-                onEdit = { screen = Screen.Edit(it) },
-                onNew = { screen = Screen.Edit(it) },
-                onImport = { save(null, it) },
-                onError = { showMessage(it) },
-                onCheckUpdates = { checkUpdates() },
-                onApplyUpdate = { script, info -> applyUpdate(script, info) },
-                onRetry = { reload += 1 },
-            )
-        Screen.Apps ->
-            AppsScreen(
-                modifier = Modifier.padding(padding),
-                active = hookedApps,
-                installed = installedApps,
-                scripts = scripts,
-                loading = loading,
-                onOpenApp = {
-                  appFilter = it
-                  screen = Screen.List
-                },
-            )
-        Screen.Settings ->
-            SettingsScreen(
-                modifier = Modifier.padding(padding),
-                repository = repository,
-                themeMode = themeMode,
-                onThemeModeChange = onThemeModeChange,
-                onChanged = { reload += 1 },
-                onMessage = { showMessage(it) },
-            )
-        Screen.About -> AboutScreen(modifier = Modifier.padding(padding))
-        is Screen.Edit ->
-            ScriptEditorScreen(
-                modifier = Modifier.padding(padding),
-                script = current.script,
-                knownApps = knownApps,
-                onCancel = { screen = Screen.List },
-                onSave = { updated ->
-                  val originalId = current.script.id.takeIf { id -> scripts.any { it.id == id } }
-                  save(originalId, updated)
-                },
-            )
+      }
+      Scaffold(
+          modifier = Modifier.weight(1f),
+          snackbarHost = { SnackbarHost(snackbar) },
+          bottomBar = {
+            if (!wide && screen !is Screen.Edit) {
+              NavigationBar {
+                destinations.forEach { destination ->
+                  NavigationBarItem(
+                      selected = screen::class == destination.screen::class,
+                      onClick = {
+                        if (destination.screen is Screen.List) {
+                          globalOnly = false
+                          appFilter = null
+                        }
+                        screen = destination.screen
+                      },
+                      icon = { Icon(destination.icon, contentDescription = null) },
+                      label = { Text(stringResource(destination.label)) },
+                  )
+                }
+              }
+            }
+          },
+      ) { padding ->
+        Crossfade(targetState = screen, animationSpec = tween(180), label = "screen") { current ->
+          when (current) {
+            Screen.List ->
+                ScriptListScreen(
+                    modifier = Modifier.padding(padding),
+                    scripts = scripts,
+                    loading = loading,
+                    refreshing = refreshing,
+                    loadError = loadError,
+                    activeUrl = activeUrl,
+                    appFilter = appFilter,
+                    appLabel = appLabel,
+                    globalOnly = globalOnly,
+                    defaultApps = appFilter?.let { listOf(it) } ?: emptyList(),
+                    updates = updates,
+                    checkingUpdates = checkingUpdates,
+                    onClearAppFilter = {
+                      appFilter = null
+                      globalOnly = false
+                    },
+                    onToggle = { id, enabled -> toggle(id, enabled) },
+                    onDelete = { delete(it) },
+                    onEdit = { screen = Screen.Edit(it) },
+                    onNew = { screen = Screen.Edit(it) },
+                    onImport = { save(null, it) },
+                    onError = { showMessage(it) },
+                    onCheckUpdates = { checkUpdates() },
+                    onApplyUpdate = { script, info -> applyUpdate(script, info) },
+                    onRetry = { refresh() },
+                    onRefresh = { refresh() },
+                )
+            Screen.Apps ->
+                AppsScreen(
+                    modifier = Modifier.padding(padding),
+                    apps = apps,
+                    scripts = scripts,
+                    loading = loading,
+                    refreshing = refreshing,
+                    includeAll = includeAllApps,
+                    scopeAvailable = scopeAvailable,
+                    onRefresh = { refresh() },
+                    onIncludeAllChange = { includeAllApps = it },
+                    onOpenApp = { packageName ->
+                      globalOnly = packageName == null
+                      appFilter = packageName
+                      screen = Screen.List
+                    },
+                )
+            Screen.Settings ->
+                SettingsScreen(
+                    modifier = Modifier.padding(padding),
+                    repository = repository,
+                    themeMode = themeMode,
+                    onThemeModeChange = onThemeModeChange,
+                    onChanged = { reload += 1 },
+                    onMessage = { showMessage(it) },
+                )
+            Screen.About -> AboutScreen(modifier = Modifier.padding(padding))
+            is Screen.Edit ->
+                ScriptEditorScreen(
+                    modifier = Modifier.padding(padding),
+                    script = current.script,
+                    knownApps = knownApps,
+                    onCancel = { screen = Screen.List },
+                    onSave = { updated ->
+                      val originalId = current.script.id.takeIf { id -> scripts.any { it.id == id } }
+                      save(originalId, updated)
+                    },
+                )
+          }
+        }
       }
     }
   }

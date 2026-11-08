@@ -1,0 +1,49 @@
+package org.matrix.chromext.script
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class EngineConfigTest {
+
+  @Test
+  fun emptyValuesKeepTheDefaults() {
+    val config = EngineConfig.from(emptyMap())
+    assertTrue(config.keepStorage)
+    assertTrue(config.cspRules)
+    assertTrue(config.webViewDebug)
+    assertTrue(config.erudaEnabled)
+    assertTrue(config.allowPrivileged)
+  }
+
+  @Test
+  fun parsesExplicitValues() {
+    val config =
+        EngineConfig.from(
+            mapOf(
+                EngineConfig.KEY_KEEP_STORAGE to "false",
+                EngineConfig.KEY_CSP_RULES to "false",
+                EngineConfig.KEY_WEBVIEW_DEBUG to "true",
+                EngineConfig.KEY_ERUDA to "false",
+                EngineConfig.KEY_ALLOW_PRIVILEGED to "false",
+            ))
+    assertFalse(config.keepStorage)
+    assertFalse(config.cspRules)
+    assertTrue(config.webViewDebug)
+    assertFalse(config.erudaEnabled)
+    assertFalse(config.allowPrivileged)
+  }
+
+  @Test
+  fun roundTripsThroughTheStoredMap() {
+    val config = EngineConfig(keepStorage = false, erudaEnabled = false)
+    assertEquals(config, EngineConfig.from(config.toMap()))
+  }
+
+  @Test
+  fun unknownValuesFallBackToTheDefault() {
+    val config = EngineConfig.from(mapOf(EngineConfig.KEY_KEEP_STORAGE to "nonsense"))
+    assertTrue(config.keepStorage)
+  }
+}

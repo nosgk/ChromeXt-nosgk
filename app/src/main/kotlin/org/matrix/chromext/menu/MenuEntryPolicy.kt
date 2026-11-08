@@ -20,6 +20,12 @@ data class MenuEntry(val id: Int, val titleRes: Int, val iconRes: Int)
  */
 object MenuEntryPolicy {
 
+  /**
+   * Mirrors the central `eruda_enabled` engine switch. Browser processes update this when they pull
+   * the engine config; the default keeps the pre-3.11 behavior.
+   */
+  @Volatile var erudaEnabled = true
+
   fun kindOf(url: String?): PageKind =
       when {
         isChromeXtFrontEnd(url) -> PageKind.FRONT_END
@@ -57,11 +63,13 @@ object MenuEntryPolicy {
                     R.drawable.ic_install_script,
                 ))
         PageKind.REGULAR ->
-            listOf(
-                MenuEntry(
-                    R.id.eruda_console_id,
-                    R.string.main_menu_eruda_console,
-                    R.drawable.ic_devtools,
-                ))
+            if (!erudaEnabled) emptyList()
+            else
+                listOf(
+                    MenuEntry(
+                        R.id.eruda_console_id,
+                        R.string.main_menu_eruda_console,
+                        R.drawable.ic_devtools,
+                    ))
       }
 }

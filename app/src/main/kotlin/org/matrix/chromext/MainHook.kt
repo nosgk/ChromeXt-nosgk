@@ -3,6 +3,8 @@ package org.matrix.chromext
 import android.app.Application
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.net.Uri
+import android.os.Bundle
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -17,7 +19,6 @@ import org.matrix.chromext.hook.PageMenuHook
 import org.matrix.chromext.hook.PreferenceHook
 import org.matrix.chromext.hook.UserScriptHook
 import org.matrix.chromext.hook.WebViewHook
-import org.matrix.chromext.script.CentralBridge
 import org.matrix.chromext.utils.Log
 import org.matrix.chromext.utils.XposedApi
 import org.matrix.chromext.utils.findMethodOrNull
@@ -32,7 +33,8 @@ import org.matrix.chromext.utils.hookAfter
  */
 class MainHook : XposedModule() {
 
-  @Volatile private var reported = false
+  /** Packages already reported by this process; a process can host more than one package. */
+  private val reported = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
   override fun onModuleLoaded(param: ModuleLoadedParam) {
     XposedApi.install(this)
@@ -43,6 +45,7 @@ class MainHook : XposedModule() {
   override fun onPackageReady(param: PackageReadyParam) {
     Log.d(param.packageName + " started")
     if (param.packageName == "org.matrix.chromext") return
+    if (param.packageName != "android") reportHookedApp(param.packageName, param.applicationInfo)
     val classLoader = param.classLoader
     if (BrowserCatalog.supportedPackages.contains(param.packageName)) {
       // Every constructor taking a Context, rather than a fixed index into an order the JLS leaves
@@ -61,7 +64,6 @@ class MainHook : XposedModule() {
       constructors.forEach { constructor ->
         constructor.hookAfter {
           Chrome.init(it.args[0] as Context, param.packageName)
-          reportHookedApp(param.packageName, param.applicationInfo)
           // Keep the menu hooks reachable even when the UserScript hook cannot be installed
           runCatching { initHooks(UserScriptHook) }.onFailure { Log.ex(it) }
           if (ContextMenuHook.isInit) return@hookAfter
@@ -103,7 +105,6 @@ class MainHook : XposedModule() {
 
       if (ctx != null && param.packageName != "android") {
         Chrome.init(ctx, ctx.packageName)
-        reportHookedApp(param.packageName, param.applicationInfo)
       }
 
       if (Chrome.isMi) {
@@ -182,22 +183,47 @@ class MainHook : XposedModule() {
           .getOrNull()
 
   private fun reportHookedApp(packageName: String, info: ApplicationInfo) {
-    if (reported) return
-    reported = true
-    val packageManager = currentApplication()?.packageManager
+    if (!reported.add(packageName)) return
+    // Use the system context so the report works before Chrome.init and for apps that are not
+    // browsers at all (user-added WebView hosts). ActivityThread.getSystemContext() is the same
+    // hidden access AndroidAppHelper used internally.
+    val context = systemContext() ?: currentApplication() ?: return
+    val packageManager = context.packageManager
     val label =
-        runCatching {
-              if (packageManager == null) "" else info.loadLabel(packageManager).toString()
-            }
-            .getOrDefault("")
+        runCatching { info.loadLabel(packageManager).toString() }.getOrDefault("")
     val versionName =
-        runCatching {
-              if (packageManager == null) ""
-              else packageManager.getPackageInfo(packageName, 0).versionName ?: ""
-            }
+        runCatching { packageManager.getPackageInfo(packageName, 0).versionName ?: "" }
             .getOrDefault("")
-    Chrome.IO.submit { CentralBridge.reportHookedApp(packageName, label, versionName) }
+    Chrome.IO.submit {
+      runCatching {
+        val extras =
+            Bundle().apply {
+              putString("package", packageName)
+              putString("label", label)
+              putString("version", versionName)
+            }
+        context.contentResolver.call(
+            Uri.parse("content://org.matrix.chromext.scripts"),
+            "reportHookedApp",
+            null,
+            extras,
+        )
+      }
+    }
   }
+
+  private fun systemContext(): Context? =
+      runCatching {
+            val activityThread = Class.forName("android.app.ActivityThread")
+            val current =
+                activityThread.getDeclaredMethod("currentActivityThread").apply {
+                  isAccessible = true
+                }
+                .invoke(null)
+            activityThread.getDeclaredMethod("getSystemContext").apply { isAccessible = true }
+                .invoke(current) as? Context
+          }
+          .getOrNull()
 
   private fun hookWebView() {
     if (WebViewHook.ChromeClient == null || WebViewHook.ViewClient == null) return

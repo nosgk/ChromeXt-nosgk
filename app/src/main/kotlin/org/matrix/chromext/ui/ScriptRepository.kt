@@ -1,6 +1,7 @@
 package org.matrix.chromext.ui
 
 import android.content.Context
+import org.matrix.chromext.script.EngineConfig
 import org.matrix.chromext.script.HookedApp
 import org.matrix.chromext.script.Script
 import org.matrix.chromext.script.ScriptRecord
@@ -32,6 +33,18 @@ class ScriptRepository(context: Context) {
   fun updateStorage(id: String, storage: String): Boolean = store.updateStorage(id, storage)
 
   fun hookedApps(): List<HookedApp> = store.hookedApps()
+
+  fun engineConfig(): EngineConfig = EngineConfig.from(store.config())
+
+  fun saveEngineConfig(config: EngineConfig) = store.putConfigs(config.toMap())
+
+  fun databasePath(): String = store.databasePath()
+
+  fun databaseSize(): Long = store.databaseSize()
+
+  fun vacuum(): Long = store.vacuum()
+
+  fun clearOrphanStorage(): Int = store.clearOrphanStorage()
 
   fun close() {
     store.close()

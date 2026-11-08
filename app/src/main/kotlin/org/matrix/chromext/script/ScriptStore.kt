@@ -9,6 +9,23 @@ import android.database.sqlite.SQLiteDatabase
 import android.os.Build
 import org.json.JSONObject
 
+/** Grants that imply the script keeps data in GM_storage. */
+private val STORAGE_GRANTS =
+    setOf(
+        "GM_setValue",
+        "GM_getValue",
+        "GM_listValues",
+        "GM_addValueChangeListener",
+        "GM_removeValueChangeListener",
+        "GM_cookie",
+        "GM.setValue",
+        "GM.getValue",
+        "GM.listValues",
+        "GM.addValueChangeListener",
+        "GM.removeValueChangeListener",
+        "GM.cookie",
+    )
+
 /** Raw database row. Parsing stays in the browser process, so the provider never downloads @require. */
 data class ScriptRecord(
     val id: String,
@@ -87,6 +104,7 @@ fun Script.toRecord(): ScriptRecord =
 /** Thin CRUD over the `script` table, usable from both the browser and the provider process. */
 class ScriptStore(context: Context) {
 
+  private val appContext = context.applicationContext
   private val helper = ScriptDbHelper(context)
 
   fun records(): List<ScriptRecord> {
@@ -219,6 +237,7 @@ class ScriptStore(context: Context) {
       lastSeen: Long = System.currentTimeMillis(),
   ): Boolean {
     if (packageName.isBlank()) return false
+    val db = helper.writableDatabase
     val values =
         ContentValues().apply {
           put("package_name", packageName)
@@ -226,8 +245,81 @@ class ScriptStore(context: Context) {
           put("version_name", versionName)
           put("last_seen", lastSeen)
         }
+    db.insertWithOnConflict("hooked_app", null, values, SQLiteDatabase.CONFLICT_IGNORE)
+    // A plain provider call only refreshes last_seen; the explicit report from the hooked process
+    // fills in label/version, so never overwrite a known label with an empty one.
+    val update =
+        ContentValues().apply {
+          put("last_seen", lastSeen)
+          if (label.isNotBlank()) put("label", label)
+          if (versionName.isNotBlank()) put("version_name", versionName)
+        }
+    return db.update("hooked_app", update, "package_name = ?", arrayOf(packageName)) > 0
+  }
+
+  fun config(): Map<String, String> {
+    val result = mutableMapOf<String, String>()
+    helper.readableDatabase
+        .query("config", arrayOf("key", "value"), null, null, null, null, null)
+        .use { cursor ->
+          while (cursor.moveToNext()) {
+            result[cursor.getString(0)] = cursor.getString(1)
+          }
+        }
+    return result
+  }
+
+  fun putConfig(key: String, value: String): Boolean {
+    val values = ContentValues().apply { put("key", key); put("value", value) }
     return helper.writableDatabase
-        .insertWithOnConflict("hooked_app", null, values, SQLiteDatabase.CONFLICT_REPLACE) != -1L
+        .insertWithOnConflict("config", null, values, SQLiteDatabase.CONFLICT_REPLACE) != -1L
+  }
+
+  fun putConfigs(values: Map<String, String>) {
+    val db = helper.writableDatabase
+    db.beginTransaction()
+    try {
+      values.forEach { (key, value) ->
+        val row = ContentValues().apply { put("key", key); put("value", value) }
+        db.insertWithOnConflict("config", null, row, SQLiteDatabase.CONFLICT_REPLACE)
+      }
+      db.setTransactionSuccessful()
+    } finally {
+      db.endTransaction()
+    }
+  }
+
+  /** Physical size of the SQLite file, used by the settings telemetry card. */
+  fun databaseSize(): Long = appContext.getDatabasePath(ScriptDbHelper.DATABASE_NAME).length()
+
+  fun databasePath(): String =
+      appContext.getDatabasePath(ScriptDbHelper.DATABASE_NAME).absolutePath
+
+  /** Runs SQLite VACUUM and returns the number of bytes reclaimed (negative if it grew). */
+  fun vacuum(): Long {
+    val before = databaseSize()
+    helper.writableDatabase.execSQL("VACUUM")
+    return before - databaseSize()
+  }
+
+  fun clearStorage(id: String): Boolean {
+    val values = ContentValues().apply { putNull("storage") }
+    return helper.writableDatabase.update("script", values, "id = ?", arrayOf(id)) > 0
+  }
+
+  /**
+   * Removes GM_storage rows whose script no longer declares any storage API. Returns how many rows
+   * were cleared.
+   */
+  fun clearOrphanStorage(): Int {
+    var cleared = 0
+    records().forEach { record ->
+      if (record.storage == null) return@forEach
+      val parsed = parseScript(record.meta + record.code, null, hydrateRequires = false)
+      val usesStorage = parsed?.grant?.any { it in STORAGE_GRANTS } == true
+      if (!usesStorage && clearStorage(record.id)) cleared += 1
+    }
+    return cleared
   }
 
   private fun Cursor.string(name: String, default: String = ""): String {

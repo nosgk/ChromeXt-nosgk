@@ -93,7 +93,7 @@ object GM {
     code = "\ndelete window.__loading__;\n${code};"
     code = localScript.get("globalThis")!! + script.lib.joinToString("\n") + code
     codes.add(
-        "(()=>{ const GM = {key:${Local.key}, name:'${Local.name}'}; const GM_info = ${GM_info}; GM_info.script.code = (key=null) => {${code}};\n${grants}GM.bootstrap();})();\n//# sourceURL=local://ChromeXt/${Uri.encode(script.id)}")
+        "(()=>{ const GM = {key:${Local.key}, name:'${Local.name}', privileged:${ScriptDbManager.engine.allowPrivileged}}; const GM_info = ${GM_info}; GM_info.script.code = (key=null) => {${code}};\n${grants}GM.bootstrap();})();\n//# sourceURL=local://ChromeXt/${Uri.encode(script.id)}")
     return codes
   }
 }
