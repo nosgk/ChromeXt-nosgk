@@ -1,6 +1,6 @@
 package org.matrix.chromext
 
-import android.app.AndroidAppHelper
+import android.app.Application
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.webkit.WebChromeClient
@@ -90,7 +90,7 @@ class MainHook : XposedModule() {
         }
       }
     } else {
-      val ctx = AndroidAppHelper.currentApplication()
+      val ctx = currentApplication()
 
       Chrome.isMi =
           Chrome.isMi ||
@@ -167,12 +167,26 @@ class MainHook : XposedModule() {
     }
   }
 
+  /**
+   * The legacy API jar shipped a stub for `android.app.AndroidAppHelper`. libxposed does not, and
+   * adding a stub in the `android.app` namespace would end up packaged in the APK, so call the
+   * hidden method the same way the stub did. Hooked processes run without hidden-API enforcement.
+   */
+  private fun currentApplication(): Application? =
+      runCatching {
+            val activityThread = Class.forName("android.app.ActivityThread")
+            val method = activityThread.getDeclaredMethod("currentApplication")
+            method.isAccessible = true
+            method.invoke(null) as? Application
+          }
+          .getOrNull()
+
   private fun reportHookedApp(packageName: String, info: ApplicationInfo) {
     if (reported) return
     reported = true
     val label =
         runCatching {
-              val pm = AndroidAppHelper.currentApplication()?.packageManager
+              val pm = currentApplication()?.packageManager
               if (pm == null) "" else info.loadLabel(pm).toString()
             }
             .getOrDefault("")

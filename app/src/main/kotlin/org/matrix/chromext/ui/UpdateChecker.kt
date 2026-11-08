@@ -28,7 +28,7 @@ data class UpdateInfo(
     val error: UpdateError? = null,
 ) {
   val hasUpdate: Boolean
-    get() = remote != null && compareVersions(remoteVersion, currentVersion) > 0
+    get() = remote != null && UpdateChecker.compareVersions(remoteVersion, currentVersion) > 0
 }
 
 /**

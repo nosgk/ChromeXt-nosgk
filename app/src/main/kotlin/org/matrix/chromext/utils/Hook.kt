@@ -25,7 +25,8 @@ class HookParam internal constructor(private val chain: XposedInterface.Chain) {
   /** Mutable copy: assignments here are replayed through `proceed(args)` by the helper. */
   val args: MutableList<Any?> = ArrayList<Any?>(chain.args)
 
-  val thisObject: Any? = chain.thisObject
+  /** The receiver. All hooks installed by this module are instance methods or constructors. */
+  val thisObject: Any = chain.thisObject!!
 
   val executable: Executable = chain.executable
 
@@ -80,7 +81,7 @@ fun Constructor<*>.hookAfter(priority: Int = PRIORITY_DEFAULT, hooker: Hooker): 
     }
 
 /** Keeps the `before { } / after { }` DSL used by the preference hook. */
-class XposedHookFactory(priority: Int = PRIORITY_DEFAULT) {
+class XposedHookFactory(priority: Int = PRIORITY_DEFAULT) : XposedInterface.Hooker {
   private var beforeMethod: Hooker? = null
   private var afterMethod: Hooker? = null
 
@@ -92,7 +93,7 @@ class XposedHookFactory(priority: Int = PRIORITY_DEFAULT) {
     afterMethod = after
   }
 
-  internal fun build(): Hooker = { chain ->
+  override fun intercept(chain: XposedInterface.Chain): Any? {
     val param = HookParam(chain)
     beforeMethod?.let {
       try {
@@ -110,7 +111,7 @@ class XposedHookFactory(priority: Int = PRIORITY_DEFAULT) {
         Log.ex(thr)
       }
     }
-    param.result
+    return param.result
   }
 }
 
@@ -119,5 +120,5 @@ fun Method.hookMethod(
     hook: XposedHookFactory.() -> Unit,
 ): Unhook {
   val factory = XposedHookFactory(priority).apply(hook)
-  return XposedApi.require().hook(this).setPriority(priority).intercept(factory.build())
+  return XposedApi.require().hook(this).setPriority(priority).intercept(factory)
 }

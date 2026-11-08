@@ -62,7 +62,7 @@ object PreferenceHook : BaseHook() {
           // String fname, @Nullable Bundle args)
         }
         .hookAfter {
-          if (it.result::class.java == proxy.developerSettings) {
+          if (it.result!!::class.java == proxy.developerSettings) {
             Resource.enrich(it.args[0] as Context)
           }
         }

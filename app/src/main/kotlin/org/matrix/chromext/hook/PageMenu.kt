@@ -184,7 +184,7 @@ object PageMenuHook : BaseHook() {
             // public AppMenuPropertiesDelegate createAppMenuPropertiesDelegate()
             .hookAfter {
               findMenuHook!!.unhook()
-              val tabbedAppMenuPropertiesDelegate = it.result::class.java
+              val tabbedAppMenuPropertiesDelegate = it.result!!::class.java
               inflateAppMenu(tabbedAppMenuPropertiesDelegate)
             }
 
