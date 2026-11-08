@@ -41,23 +41,9 @@ jobs:
         with:
           cache-read-only: false
 
-      - name: Validate (temporary)
-        run: |
-          ./gradlew --no-daemon ktfmtFormat testDebugUnitTest
-          git diff --stat
-
-      - name: Upload formatted sources (temporary)
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: formatted-sources-${{ github.run_number }}
-          path: |
-            app/src
-            tools
-          retention-days: 3
-
       - name: Build release
         run: ./gradlew --no-daemon assembleRelease
+
       - name: Verify release APK
         run: bash scripts/verify-release.sh
 
