@@ -68,6 +68,13 @@ object ScriptStorage {
         "users=\$(ls /data/user 2>/dev/null)\n" +
             "for u in \$users; do\n" +
             "  for p in $packages; do\n" +
+            "    for f in /data/user/\$u/\$p/databases/$DB_NAME /data/user_de/\$u/\$p/databases/$DB_NAME; do\n" +
+            "      if [ -f \"\$f\" ]; then\n" +
+            "        s=\$(stat -c %s \"\$f\" 2>/dev/null || echo 0)\n" +
+            "        t=\$(stat -c %Y \"\$f\" 2>/dev/null || echo 0)\n" +
+            "        echo \"\$f|\$s|\$t\"\n" +
+            "      fi\n" +
+            "    done\n" +
             "    for f in \$(find /data/user/\$u/\$p /data/user_de/\$u/\$p -maxdepth 3 \\( -name $DB_NAME -o -name $DB_NAME.db \\) 2>/dev/null); do\n" +
             "      s=\$(stat -c %s \"\$f\" 2>/dev/null || echo 0)\n" +
             "      t=\$(stat -c %Y \"\$f\" 2>/dev/null || echo 0)\n" +
@@ -76,6 +83,12 @@ object ScriptStorage {
             "  done\n" +
             "done\n" +
             "for p in $packages; do\n" +
+            "  f=/data/data/\$p/databases/$DB_NAME\n" +
+            "  if [ -f \"\$f\" ]; then\n" +
+            "    s=\$(stat -c %s \"\$f\" 2>/dev/null || echo 0)\n" +
+            "    t=\$(stat -c %Y \"\$f\" 2>/dev/null || echo 0)\n" +
+            "    echo \"\$f|\$s|\$t\"\n" +
+            "  fi\n" +
             "  for f in \$(find /data/data/\$p -maxdepth 3 \\( -name $DB_NAME -o -name $DB_NAME.db \\) 2>/dev/null); do\n" +
             "    s=\$(stat -c %s \"\$f\" 2>/dev/null || echo 0)\n" +
             "    t=\$(stat -c %Y \"\$f\" 2>/dev/null || echo 0)\n" +

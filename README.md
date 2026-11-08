@@ -201,6 +201,7 @@ node --test tools/js-tests/*.test.js
 ## 3.14.1 更新内容
 
 - 修复「修改引擎开关后重启 Chrome，打开任何网页都崩溃」：应用引擎配置时在 Chromium 浏览器进程里调用了 `WebView.setWebContentsDebuggingEnabled`，会在 Chrome 进程内初始化 WebView Provider 并导致崩溃。现在只在真正的 WebView 宿主（`WebViewHook.isInit`）里、主线程上调用，整个配置应用过程也加了保护。
+- 修复重装模块后上游 ChromeXt 安装的脚本消失：一次性迁移标志在浏览器数据里，而中央数据库随模块卸载被清空，导致迁移永远跳过。迁移标志改为 `migrated_to_central_v13`，中央库为空时也会重新迁移；浏览器本地库扫描同时直接探测标准路径与 `find` 结果。
 
 ## 3.14.0 更新内容
 

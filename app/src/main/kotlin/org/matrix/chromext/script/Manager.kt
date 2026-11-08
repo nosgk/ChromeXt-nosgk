@@ -25,7 +25,7 @@ import org.matrix.chromext.utils.shouldBypassSandbox
 object ScriptDbManager {
 
   private const val PREFS = "ChromeXt"
-  private const val MIGRATED_KEY = "migrated_to_central_v10"
+  private const val MIGRATED_KEY = "migrated_to_central_v13"
 
   // Read from page-injection threads while actions may add/remove scripts from the UI thread.
   val scripts: MutableList<Script> = CopyOnWriteArrayList(query())
@@ -99,10 +99,10 @@ object ScriptDbManager {
   }
 
   /** Pull the central database when it is reachable; keep the local list otherwise. */
-  fun refreshFromCentral() {
-    val records = CentralBridge.queryRecords() ?: return
+  fun refreshFromCentral(records: List<ScriptRecord>? = null) {
+    val source = records ?: CentralBridge.queryRecords() ?: return
     val loaded =
-        records.mapNotNull { record ->
+        source.mapNotNull { record ->
           val existing = scripts.find { it.id == record.id }
           val parsed =
               parseScript(
@@ -148,17 +148,22 @@ object ScriptDbManager {
     if (!CentralBridge.isAvailable()) return
     applyConfig(CentralBridge.getConfig() ?: emptyMap())
     val prefs = Chrome.getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    if (!prefs.getBoolean(MIGRATED_KEY, false)) {
-      // Only mark the migration as done when the provider actually answered; a failed attempt
-      // (module process not running yet) must be retried, or scripts installed by the upstream
-      // ChromeXt in this browser's local database would never appear in the manager.
+    val central = CentralBridge.queryRecords() ?: return
+    // Re-run the local migration when the flag is missing *or* the central database is empty.
+    // Reinstalling the module wipes its data but the flag lives in the browser's preferences, so
+    // the old one-shot logic permanently hid scripts that upstream ChromeXt left in this browser's
+    // database.
+    if (!prefs.getBoolean(MIGRATED_KEY, false) || central.isEmpty()) {
       val inserted = CentralBridge.migrate(scripts.map { it.toRecord() })
       if (inserted != null) {
         Log.i("Migrated $inserted scripts to the central database")
         prefs.edit().putBoolean(MIGRATED_KEY, true).apply()
+        // The snapshot above predates the migration; re-read so the injected list is complete.
+        refreshFromCentral()
+        return
       }
     }
-    refreshFromCentral()
+    refreshFromCentral(central)
   }
 
   /**
