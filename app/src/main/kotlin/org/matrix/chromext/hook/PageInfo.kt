@@ -7,6 +7,8 @@ import android.widget.TextView
 import org.matrix.chromext.Chrome
 import org.matrix.chromext.Listener
 import org.matrix.chromext.R
+import org.matrix.chromext.menu.MenuEntryPolicy
+import org.matrix.chromext.menu.PageKind
 import org.matrix.chromext.proxy.PageInfoProxy
 import org.matrix.chromext.proxy.UserScriptProxy
 import org.matrix.chromext.script.Local
@@ -39,22 +41,20 @@ object PageInfoHook : BaseHook() {
       val subTitle = proxy.mSubtitle?.get(row) as? TextView
       (subTitle?.getParent() as? ViewGroup)?.removeView(subTitle)
       val label = title.get(row) as TextView
-      val onClick: () -> Unit
-      if (isChromeXtFrontEnd(url)) {
-        label.setText(R.string.main_menu_developer_tools)
-        onClick = { Listener.on("inspectPages") }
-      } else if (isUserScript(url)) {
-        label.setText(R.string.main_menu_install_script)
-        onClick = {
-          val sandBoxed = shouldBypassSandbox(url)
-          Chrome.evaluateJavascript(listOf("Symbol.installScript(true);"), null, null, sandBoxed)
+      label.setText(MenuEntryPolicy.titleRes(url))
+      fun activate() {
+        when (MenuEntryPolicy.kindOf(url)) {
+          PageKind.FRONT_END -> Listener.on("inspectPages")
+          PageKind.USER_SCRIPT -> {
+            val sandBoxed = shouldBypassSandbox(url)
+            Chrome.evaluateJavascript(
+                listOf("Symbol.installScript(true);"), null, null, sandBoxed)
+          }
+          PageKind.REGULAR -> UserScriptProxy.evaluateJavascript(Local.openEruda)
         }
-      } else {
-        label.setText(R.string.main_menu_eruda_console)
-        onClick = { UserScriptProxy.evaluateJavascript(Local.openEruda) }
       }
       row.setOnClickListener {
-        onClick()
+        activate()
         runCatching { destroy.invoke(host) }.onFailure { Log.ex(it) }
       }
       return row

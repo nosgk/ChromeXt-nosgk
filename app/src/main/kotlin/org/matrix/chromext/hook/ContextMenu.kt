@@ -17,6 +17,7 @@ import org.matrix.chromext.Chrome
 import org.matrix.chromext.Listener
 import org.matrix.chromext.R
 import org.matrix.chromext.Resource
+import org.matrix.chromext.menu.MenuEntryPolicy
 import org.matrix.chromext.script.Local
 import org.matrix.chromext.utils.*
 
@@ -66,10 +67,7 @@ object ContextMenuHook : BaseHook() {
           val menu = it.args[1] as Menu
           if (menu.findItem(erudaMenuId) != null) return@hookAfter
           Resource.enrich(Chrome.getContext())
-          val titleId =
-              if (isChromeXtFrontEnd(url)) R.string.main_menu_developer_tools
-              else if (isUserScript(url)) R.string.main_menu_install_script
-              else R.string.main_menu_eruda_console
+          val titleId = MenuEntryPolicy.titleRes(url)
           val erudaMenu = menu.add(titleId)
           val mId = erudaMenu::class.java.getDeclaredField("mId")
           mId.setAccessible(true)
@@ -127,11 +125,7 @@ object ContextMenuHook : BaseHook() {
               val view = it.args[0]
               if (WebViewHook.WebView!!.isAssignableFrom(view::class.java)) Chrome.updateTab(view)
               val url = Chrome.getUrl()!!
-              val titleId =
-                  if (isChromeXtFrontEnd(url)) R.string.main_menu_developer_tools
-                  else if (isUserScript(url)) R.string.main_menu_install_script
-                  else R.string.main_menu_eruda_console
-              text?.get()?.setText(titleId)
+              text?.get()?.setText(MenuEntryPolicy.titleRes(url))
             }
           }
     } else if (Chrome.isMi) {

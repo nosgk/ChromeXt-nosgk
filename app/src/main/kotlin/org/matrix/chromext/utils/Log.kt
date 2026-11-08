@@ -13,7 +13,9 @@ object Log {
 
   fun i(msg: String) {
     Log.i(TAG, msg)
-    XposedBridge.log("ChromeXt logging: " + msg)
+    // Info messages are frequent (every page navigation); only mirror them to the Xposed log on
+    // debug builds so release devices do not pay for the IPC and do not leak URLs into the log.
+    if (BuildConfig.DEBUG) XposedBridge.log("ChromeXt logging: " + msg)
   }
 
   fun d(msg: String, full: Boolean = false) {

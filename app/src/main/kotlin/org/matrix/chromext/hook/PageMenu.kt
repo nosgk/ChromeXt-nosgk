@@ -17,6 +17,7 @@ import org.matrix.chromext.Chrome
 import org.matrix.chromext.Listener
 import org.matrix.chromext.R
 import org.matrix.chromext.Resource
+import org.matrix.chromext.menu.MenuEntryPolicy
 import org.matrix.chromext.proxy.PageMenuProxy
 import org.matrix.chromext.proxy.UserScriptProxy
 import org.matrix.chromext.script.Local
@@ -359,7 +360,7 @@ object PageMenuHook : BaseHook() {
             newMenuItem.setVisible(true)
             items.add(position + 1, newMenuItem)
           }
-          for (i in 0..3) items.removeLast()
+          for (i in 0..3) items.removeAt(items.size - 1)
         }
 
     // Inflate for MVC UI model
@@ -599,39 +600,9 @@ object PageMenuHook : BaseHook() {
             return menuModel
           }
 
-          val entries =
-              if (isChromeXtFrontEnd(url)) {
-                listOf(
-                    Triple(
-                        R.id.developer_tools_id,
-                        R.string.main_menu_developer_tools,
-                        R.drawable.ic_devtools,
-                    ),
-                    Triple(
-                        R.id.extension_id,
-                        R.string.main_menu_extension,
-                        R.drawable.ic_extension,
-                    ),
-                )
-              } else if (isUserScript(url)) {
-                listOf(
-                    Triple(
-                        R.id.install_script_id,
-                        R.string.main_menu_install_script,
-                        R.drawable.ic_install_script,
-                    ))
-              } else {
-                listOf(
-                    Triple(
-                        R.id.eruda_console_id,
-                        R.string.main_menu_eruda_console,
-                        R.drawable.ic_devtools,
-                    ))
-              }
-
           val menusToAdd = mutableListOf<Any>()
-          entries.forEach { (id, titleId, iconResId) ->
-            val menuModel = standardMenuItem(id, titleId, iconResId)
+          MenuEntryPolicy.entries(url).forEach { entry ->
+            val menuModel = standardMenuItem(entry.id, entry.titleRes, entry.iconRes)
             if (menuModel == null) {
               Log.e("Cannot build a standard app menu item for the ChromeXt entries")
               return@hookAfter
