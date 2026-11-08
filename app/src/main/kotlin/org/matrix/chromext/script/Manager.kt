@@ -10,6 +10,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 import org.json.JSONArray
 import org.json.JSONObject
 import org.matrix.chromext.Chrome
+import org.matrix.chromext.bridge.JsBridge
 import org.matrix.chromext.utils.Log
 import org.matrix.chromext.utils.invokeMethod
 import org.matrix.chromext.utils.isChromeXtFrontEnd
@@ -146,7 +147,7 @@ object ScriptDbManager {
     } else if (runScripts) {
       codes.add("Symbol.ChromeXt.lock(${Local.key}, '${Local.name}');")
     }
-    codes.add("//# sourceURL=local://ChromeXt/init" + if (frameId == null) "" else "/" + frameId)
+    codes.add("//# sourceURL=${JsBridge.SOURCE_PREFIX}" + if (frameId == null) "" else "/" + frameId)
     webSettings?.invokeMethod(true) { name == "setJavaScriptEnabled" }
     val initScript = codes.joinToString("\n")
 

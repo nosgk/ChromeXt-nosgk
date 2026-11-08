@@ -9,6 +9,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.matrix.chromext.Chrome
 import org.matrix.chromext.Resource
+import org.matrix.chromext.bridge.JsBridge
 import org.matrix.chromext.utils.Log
 import org.matrix.chromext.utils.randomString
 
@@ -145,7 +146,7 @@ object Local {
             .split("\n")
             .filter { if (it.length != 0) true else Random.nextDouble() > seed }
     anchorInChromeXt = parts.indexOfFirst { it.endsWith("// Kotlin anchor") } + 2
-    initChromeXt = parts.joinToString("\n")
+    initChromeXt = parts.joinToString("\n") + "\n" + JsBridge.protocolDeclaration()
     openEruda =
         localScript[1]
             .replaceFirst("Symbol.ChromeXt", "Symbol." + name)

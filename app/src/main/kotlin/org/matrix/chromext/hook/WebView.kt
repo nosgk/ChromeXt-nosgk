@@ -6,6 +6,7 @@ import android.os.Handler
 import java.lang.ref.WeakReference
 import org.matrix.chromext.Chrome
 import org.matrix.chromext.Listener
+import org.matrix.chromext.bridge.JsBridge
 import org.matrix.chromext.script.Local
 import org.matrix.chromext.script.ScriptDbManager
 import org.matrix.chromext.utils.Log
@@ -48,7 +49,7 @@ object WebViewHook : BaseHook() {
           val lineNumber = consoleMessage.invokeMethod { name == "lineNumber" }
           val message = consoleMessage.invokeMethod { name == "message" } as String
           if (messageLevel.toString() == "TIP" &&
-              sourceId.startsWith("local://ChromeXt/init") &&
+              JsBridge.isInitSource(sourceId) &&
               lineNumber == Local.anchorInChromeXt) {
             val webView =
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.http.HttpResponseCache
 import org.matrix.chromext.Chrome
 import org.matrix.chromext.Listener
+import org.matrix.chromext.bridge.JsBridge
 import org.matrix.chromext.proxy.UserScriptProxy
 import org.matrix.chromext.script.Local
 import org.matrix.chromext.script.ScriptDbManager
@@ -63,7 +64,7 @@ object UserScriptHook : BaseHook() {
           val lineNumber = it.args[2] as Int
           val sourceId = it.args[3] as String
           if (it.args[0] as Int == 0 &&
-              sourceId.startsWith("local://ChromeXt/init") &&
+              JsBridge.isInitSource(sourceId) &&
               lineNumber == Local.anchorInChromeXt) {
             Listener.startAction(it.args[1] as String, proxy.getTab(it.thisObject), null, sourceId)
           } else {
