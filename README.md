@@ -1,138 +1,209 @@
-# ChromeXt
+# ChromeXt（nosgk 分支）
 
 [![Build](https://github.com/nosgk/ChromeXt-nosgk/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/nosgk/ChromeXt-nosgk/actions/workflows/build.yml)
-[![Release](https://img.shields.io/github/v/release/nosgk/ChromeXt-nosgk?color=orange&label=Download)](https://github.com/nosgk/ChromeXt-nosgk/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/nosgk/ChromeXt-nosgk/total?label=Downloads&color=yellow)](https://github.com/nosgk/ChromeXt-nosgk/releases)
+[![Release](https://img.shields.io/github/v/release/nosgk/ChromeXt-nosgk?color=orange&label=%E4%B8%8B%E8%BD%BD)](https://github.com/nosgk/ChromeXt-nosgk/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/nosgk/ChromeXt-nosgk/total?label=%E4%B8%8B%E8%BD%BD%E9%87%8F&color=yellow)](https://github.com/nosgk/ChromeXt-nosgk/releases)
 
-Add UserScript and DevTools support to Chromium-based and WebView-based Android browsers using the Xposed framework.
+借助 Xposed 框架，为基于 Chromium 内核以及基于 WebView 的 Android 浏览器提供 UserScript（用户脚本）与 DevTools（开发者工具）支持。
 
-This repository is a fork of [JingMatrix/ChromeXt](https://github.com/JingMatrix/ChromeXt), maintained by [nosgk](https://github.com/nosgk). The upstream project remains the reference implementation; this fork focuses on engineering hardening, a native script manager, and reproducible builds.
+---
 
-## How it works
+> [!WARNING]
+> **请先读完这段话，再决定是否使用。**
+>
+> 1. 本仓库是 [JingMatrix/ChromeXt](https://github.com/JingMatrix/ChromeXt) 的**第三方分支**，由 AI 编程助手在维护者 [nosgk](https://github.com/nosgk) 的指导与审核下大量修改、重写和补充。它不是上游官方版本，也**不代表上游的立场、质量或路线**。
+> 2. **遇到任何问题，请在本仓库提 issue，不要去找上游仓库。** 上游维护者没有参与本分支的开发，也没有义务为本分支的代码、构建产物或行为负责。把本分支的 bug 报到上游，只会给无关的人添麻烦。
+> 3. **本项目的代码与文档主要由 AI 编写。** AI 生成的内容可能存在逻辑疏漏、边界条件遗漏、与上游行为不一致、甚至完全错误的地方。维护者会尽量审核与测试，但**不提供任何正确性保证**。
+> 4. **使用风险自负。** 本模块需要注入浏览器进程、修改运行时行为、读写脚本数据，并且依赖 Xposed / LSPatch 这类本身就有系统级风险的框架。刷机变砖、应用崩溃、数据丢失、账号异常、隐私泄露等一切后果，由使用者自行承担。请务必先做好备份，并清楚自己在做什么。
+> 5. 如果你需要稳定、经过长期验证的实现，请使用[上游项目](https://github.com/JingMatrix/ChromeXt)。
 
-ChromeXt hooks `onUpdateUrl` in [UserScript.kt](app/src/main/kotlin/org/matrix/chromext/hook/UserScript.kt), compares the current URL with installed UserScripts, and evaluates JavaScript through the `javascript:` scheme or the DevTools protocol when available.
+---
 
-Chromium-based browsers such as Chrome, Brave, Vivaldi, Whale, Bromite, Cromite, Thorium and others are supported. Most WebView-based browsers are supported as well; if yours is not, please open an issue.
+## 这个仓库是什么
 
-> WebView users: enable this module only for the browser application you want to use, not for every WebView host and not for the Android system.
+ChromeXt 的核心能力很直接：让 Android 上的 Chromium 系浏览器和 WebView 系浏览器能够像桌面端的 Tampermonkey 一样加载用户脚本，同时提供一套可以在手机上使用的开发者工具入口。
 
-## Requirements
+本分支在保留上游主体逻辑的前提下，主要做了三件事：
 
-- Android 5.0+ (API 21+), **arm64-v8a** device.
-- Xposed framework:
-  - Root users: [Vector](https://github.com/JingMatrix/Vector) or LSPosed.
-  - Non-root users: a patched [LSPatch](https://github.com/JingMatrix/LSPatch) build.
+- **工程加固**：补齐文档、测试、发布校验与签名流程，把构建收敛到一条可复现的路径上；
+- **原生脚本管理**：用 Jetpack Compose 写了一个原生管理面板，替代原先依赖网页前端的脚本管理方式；
+- **数据集中化**：把脚本数据从「每个浏览器各自一份」改成「模块内一份中央数据库 + 浏览器侧回退」，避免同一份脚本在多个浏览器里反复维护。
 
-The module code is architecture-independent. The release APK contains only the arm64-v8a slice of the Compose graphics-path native library, which is why artifacts are named `ChromeXt-arm64-v8a.apk`.
+需要再次强调的是：这些改动由 AI 主导完成，属于「能用、但需要你自己判断」的状态，而不是一个成熟商业软件的交付标准。
 
-## Install
+## 工作原理
 
-1. Download the latest `ChromeXt-arm64-v8a.apk` from [Releases](https://github.com/nosgk/ChromeXt-nosgk/releases/latest).
-2. Install it and enable the module in your Xposed manager.
-3. Scope the module to the browsers you use.
-4. Reboot the browser process (force stop or reboot).
+ChromeXt 会 hook `onUpdateUrl`（见 [UserScript.kt](app/src/main/kotlin/org/matrix/chromext/hook/UserScript.kt)），在页面地址发生变化时，把当前 URL 与已安装的用户脚本逐一比对，命中匹配规则后，再通过 `javascript:` scheme 或（可用时）DevTools 协议把脚本注入页面。
 
-Non-root LSPatch flow:
+支持的浏览器包括 Chrome、Brave、Vivaldi、Whale、Bromite、Cromite、Thorium 等 Chromium 系浏览器，以及大多数 WebView 系浏览器。如果你的浏览器不在支持列表里，可以在本仓库提 issue 说明情况——但请记得，这里是分支仓库，不是上游。
 
-1. Download a patched `lspatch.jar` and `ChromeXt-signed.apk`.
-2. Patch the target browser: `java -jar lspatch.jar <browser.apk> -d -v -m ChromeXt-signed.apk --force --injectdex`.
-3. Install the patched browser (you may need to uninstall the original first).
+> **WebView 用户请注意**：只对你实际要用的那个浏览器应用启用本模块的作用域，不要对所有 WebView 宿主、更不要对 Android 系统本身启用。WebView 的宿主范围很广，错误的作用域会让模块进入大量你并不希望它介入的进程。
 
-## Usage
+## 环境要求
 
-Install UserScripts by opening URLs that end with `.user.js`, or by sharing a JavaScript file to ChromeXt.
+- Android 5.0 及以上（API 21+），**arm64-v8a** 设备。
+- Xposed 框架，二选一：
+  - 有 root：使用 [Vector](https://github.com/JingMatrix/Vector) 或 LSPosed；
+  - 无 root：使用打过补丁的 [LSPatch](https://github.com/JingMatrix/LSPatch) 构建。
 
-### Supported UserScript APIs
+模块代码本身与 CPU 架构无关，但发布用的 APK 只打包了 Compose 图形路径原生库的 arm64-v8a 切片，因此产物统一命名为 `ChromeXt-arm64-v8a.apk`。这也是为什么在 32 位或 x86 设备上不能直接使用官方发布包。
 
-ChromeXt implements most commonly used [Tampermonkey APIs](https://www.tampermonkey.net/documentation.php):
+## 安装
 
-- `@name` (colons are not allowed), `@namespace`, `@description`, `@version`, `@author`, `@icon`
-- `@match` (Chrome match-pattern syntax, regular expressions supported), `@include`, `@exclude`
-- `@run-at`: `document-start`, `document-end`, `document-idle` (default)
-- `@grant`: `GM_addStyle`, `GM_addElement`, `GM_xmlhttpRequest`, `GM_openInTab`, `GM_registerMenuCommand`, `GM_unregisterMenuCommand`, `GM_download`, `unsafeWindow`
-- `@grant`: `GM_setValue`, `GM_getValue`, `GM_listValues`, `GM_addValueChangeListener`, `GM_removeValueChangeListener`, `GM_setClipboard`, `GM_cookie`, `GM_notification`, `window.close`
-- `@require`, `@resource` (without Subresource Integrity)
-- `@inject-into`, `@sandbox`: imported scripts may define globals by default; set `@inject-into content` or `@sandbox DOM` to disable
-- `@noframes`: frame injection requires a main-page script with `@grant frames`
+常规流程：
 
-The implementations live in [Local.kt](app/src/main/kotlin/org/matrix/chromext/script/Local.kt) and [GM.js](app/src/main/assets/GM.js). Behavior intentionally differs from Tampermonkey in a few places; check those files when in doubt.
+1. 从 [Releases](https://github.com/nosgk/ChromeXt-nosgk/releases/latest) 下载最新的 `ChromeXt-arm64-v8a.apk`；
+2. 安装后，在你的 Xposed 管理器里启用本模块；
+3. 把模块作用域设置为你实际使用的浏览器；
+4. 重启浏览器进程（强制停止或重启设备均可）。
+
+无 root 的 LSPatch 流程：
+
+1. 下载打好补丁的 `lspatch.jar` 与 `ChromeXt-signed.apk`；
+2. 对目标浏览器执行：
+   ```bash
+   java -jar lspatch.jar <browser.apk> -d -v -m ChromeXt-signed.apk --force --injectdex
+   ```
+3. 安装打过补丁的浏览器（签名不同，可能需要先卸载原版，注意提前备份数据）。
+
+## 使用
+
+### 安装用户脚本
+
+打开以 `.user.js` 结尾的链接即可触发安装流程；也可以把 JavaScript 文件分享给 ChromeXt，由它接管安装。
+
+### 支持的用户脚本 API
+
+ChromeXt 实现了 [Tampermonkey 文档](https://www.tampermonkey.net/documentation.php)中最常用的一批接口：
+
+| 类别 | 支持项 |
+| --- | --- |
+| 元数据 | `@name`（不允许出现冒号）、`@namespace`、`@description`、`@version`、`@author`、`@icon` |
+| 匹配 | `@match`（Chrome 匹配模式语法，支持正则）、`@include`、`@exclude` |
+| 时机 | `@run-at`：`document-start`、`document-end`、`document-idle`（默认） |
+| 页面操作 | `GM_addStyle`、`GM_addElement`、`GM_openInTab`、`GM_registerMenuCommand`、`GM_unregisterMenuCommand`、`GM_download`、`unsafeWindow` |
+| 网络 | `GM_xmlhttpRequest` |
+| 存储与系统 | `GM_setValue`、`GM_getValue`、`GM_listValues`、`GM_addValueChangeListener`、`GM_removeValueChangeListener`、`GM_setClipboard`、`GM_cookie`、`GM_notification`、`window.close` |
+| 依赖 | `@require`、`@resource`（不支持 Subresource Integrity） |
+| 注入控制 | `@inject-into`、`@sandbox`：被引入的脚本默认可以定义全局变量，设置 `@inject-into content` 或 `@sandbox DOM` 可关闭该行为 |
+| 框架 | `@noframes`：向 iframe 注入需要主页面脚本声明 `@grant frames` |
+
+具体实现位于 [Local.kt](app/src/main/kotlin/org/matrix/chromext/script/Local.kt) 与 [GM.js](app/src/main/assets/GM.js)。**注意：这里的若干行为是有意与 Tampermonkey 不同的**，遇到疑问时请直接读这两个文件，而不是照搬 Tampermonkey 的文档。
 
 ### `GM.ChromeXt`
 
-`GM.ChromeXt` is a powerful and dangerous API. It must be declared with `@grant GM.ChromeXt` to unlock. It exposes `ChromeXt.dispatch(action, payload)` to page scripts; actions are handled by [Listener.kt](app/src/main/kotlin/org/matrix/chromext/Listener.kt). It is locked by default so that a malicious UserScript cannot take over the browser integration.
+`GM.ChromeXt` 是一个强大且危险的接口，必须在脚本中显式声明 `@grant GM.ChromeXt` 才会解锁。它向页面脚本暴露 `ChromeXt.dispatch(action, payload)`，具体动作由 [Listener.kt](app/src/main/kotlin/org/matrix/chromext/Listener.kt) 处理。
 
-### Script management
+之所以默认锁死，是因为一旦放开，恶意用户脚本就可以直接接管浏览器集成层，做出远超「改改页面样式」的事情。请只在你完全信任某个脚本时授予这个权限。
 
-ChromeXt ships a native manager (Jetpack Compose). Open it from the launcher, from the LSPosed module card (the settings button), from the browser page menu (`Script manager`), or from Chrome's Developer options.
+### 原生脚本管理面板
 
-The manager supports:
+ChromeXt 自带一个用 Jetpack Compose 编写的原生管理面板。可以从以下入口打开：
 
-- installed-script list with search, filters, sorting and one-tap enable/disable;
-- a code editor plus per-script settings (`@run-at`, custom `@match`/`@include`/`@exclude`, update URL);
-- a `GM_storage` inspector/editor;
-- install confirmation with target sites, requested permissions and a code preview;
-- ZIP backup and restore (ChromeXt format and plain `.user.js` archives).
+- 桌面图标直接启动；
+- LSPosed 模块卡片上的设置按钮；
+- 浏览器页面菜单里的 `Script manager`；
+- Chrome 的开发者选项。
 
-Scripts live in a central database inside the module and are migrated once from each browser's legacy database. If the module process is unavailable (for example, an OEM background restriction), browsers fall back to their local database.
+面板目前支持：
 
-### Edit before installing
+- 已安装脚本列表，带搜索、筛选、排序与一键启用/停用；
+- 代码编辑器，以及每个脚本的独立设置（`@run-at`、自定义 `@match` / `@include` / `@exclude`、更新地址）；
+- `GM_storage` 查看与编辑；
+- 安装确认页，展示目标站点、申请的权限与代码预览；
+- ZIP 备份与恢复（支持 ChromeXt 自有格式，也支持纯 `.user.js` 压缩包）。
 
-If you cancel the installation prompt, you can edit the script directly in the page. Use the `Install UserScript` page menu entry afterwards to install the modified version.
+脚本保存在模块内的中央数据库里，并从各浏览器原有的旧数据库做一次性迁移。如果模块进程不可用（例如被某些 OEM 的后台策略杀掉），浏览器会自动回退到本地数据库，保证脚本仍然可用。
 
-### DevTools and Eruda
+### 先改后装
 
-The three-dot page menu offers:
+如果你在安装提示里选择了取消，可以直接在页面上编辑脚本文本；改完之后，用页面菜单里的 `Install UserScript` 再安装修改后的版本。
 
-1. `Developer tools` for the ChromeXt front end;
-2. `Script manager` to open the native panel;
-3. `Eruda console` for regular pages.
+### DevTools 与 Eruda
 
-For WebView-based browsers and Chromium forks with their own page menu (for example Herond and Whale), these entries appear in the context menu.
+页面右上角的三点菜单里提供三项入口：
 
-## Build
+1. `Developer tools`：ChromeXt 的开发者工具前端；
+2. `Script manager`：打开原生管理面板；
+3. `Eruda console`：面向普通页面的 Eruda 控制台。
 
-Builds run on GitHub Actions only; the workflow is **manual** (`workflow_dispatch`) and is never triggered by a push. See [.github/workflows/build.yml](.github/workflows/build.yml).
+对于 WebView 系浏览器，以及自带页面菜单的 Chromium 分支（例如 Herond、Whale），这些入口会出现在上下文菜单里。
 
-The workflow builds `assembleRelease`, verifies the Xposed entry point and the arm64-v8a slice, signs the APK with the keystore stored in the `release` environment, and uploads `ChromeXt-arm64-v8a.apk` with a SHA256 checksum. It intentionally has **no separate CI/test stage**; run the checks below locally.
+## 构建
 
-Local development still works if you have JDK 21 and Android SDK 35 installed:
+构建**只在 GitHub Actions 上运行**，工作流是**手动触发**（`workflow_dispatch`），任何 push 都不会自动触发。详见 [.github/workflows/build.yml](.github/workflows/build.yml)。
+
+该工作流会执行 `assembleRelease`，校验 Xposed 入口与 arm64-v8a 切片，用存放在 `release` 环境中的密钥库签名 APK，最后上传 `ChromeXt-arm64-v8a.apk` 并附带 SHA256 校验值。
+
+工作流**刻意没有单独的 CI/测试阶段**。这不是偷懒，而是为了把构建时间压到最低、并避免「CI 绿了但产物不可用」的假安全感；所有检查请按下面的命令在本地跑。
+
+本地开发需要 JDK 21 与 Android SDK 35：
 
 ```bash
-./gradlew format          # apply ktfmt
-./gradlew ktfmtCheck      # verify formatting
+./gradlew format          # 应用 ktfmt 格式化
+./gradlew ktfmtCheck      # 校验格式
 ./gradlew lintDebug       # Android lint
 ./gradlew testDebugUnitTest
 ./gradlew assembleDebug
 ```
 
-### Release signing
+### 发布签名
 
-The `release` environment holds four secrets: `SIGNING_KEY` (base64 PKCS#12 keystore), `ALIAS`, `KEY_STORE_PASSWORD` and `KEY_PASSWORD`. The keystore is not in the repository. Rotating the key requires updating the secrets; users must uninstall and reinstall to switch signatures.
+`release` 环境里保存四个 secret：`SIGNING_KEY`（base64 编码的 PKCS#12 密钥库）、`ALIAS`、`KEY_STORE_PASSWORD`、`KEY_PASSWORD`。密钥库本身不在仓库里。
 
-## Test
+轮换签名密钥需要同步更新这些 secret；而一旦签名变化，用户必须卸载重装才能升级，历史数据也可能因此丢失，操作前请想清楚。
+
+## 测试
 
 ```bash
 ./gradlew testDebugUnitTest
 node --test tools/js-tests/*.test.js
 ```
 
-See [TESTING.md](TESTING.md) for the test layout, device matrix and how to add fixtures.
+测试布局、设备矩阵以及如何新增 fixture，见 [TESTING.md](TESTING.md)。
 
-## Contributing
+## 关键入口
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md). In short: keep behavior changes explicit, add tests for pure logic, run `./gradlew format`, and run the local checks before merging. The manual build workflow must produce a signed `ChromeXt-arm64-v8a.apk`.
+想改代码的话，从这几个地方开始最省时间：
 
-Useful entry points:
+| 关注点 | 文件 |
+| --- | --- |
+| Tampermonkey API 实现 | [Local.kt](app/src/main/kotlin/org/matrix/chromext/script/Local.kt)、[GM.js](app/src/main/assets/GM.js) |
+| Eruda 配置 | [eruda.js](app/src/main/assets/eruda.js) |
+| WebView 浏览器支持 | [WebView.kt](app/src/main/kotlin/org/matrix/chromext/hook/WebView.kt) |
+| Hook 兼容层 | [proxy/](app/src/main/kotlin/org/matrix/chromext/proxy)、[hook/](app/src/main/kotlin/org/matrix/chromext/hook) |
+| 原生管理面板 | [ui/](app/src/main/kotlin/org/matrix/chromext/ui) |
+| 中央数据库与 Provider | [ScriptStore.kt](app/src/main/kotlin/org/matrix/chromext/script/ScriptStore.kt)、[ScriptContentProvider.kt](app/src/main/kotlin/org/matrix/chromext/provider/ScriptContentProvider.kt) |
 
-1. Tampermonkey API: [Local.kt](app/src/main/kotlin/org/matrix/chromext/script/Local.kt) and [GM.js](app/src/main/assets/GM.js)
-2. Eruda configuration: [eruda.js](app/src/main/assets/eruda.js)
-3. WebView browser support: [WebView.kt](app/src/main/kotlin/org/matrix/chromext/hook/WebView.kt)
-4. Hook compatibility: [proxy/](app/src/main/kotlin/org/matrix/chromext/proxy) and [hook/](app/src/main/kotlin/org/matrix/chromext/hook)
+## 已知差异与限制
 
-## Security
+- **与 Tampermonkey 的行为差异**：API 覆盖面接近，但并非完全等价，部分语义是有意简化的，遇到脚本不工作时先对照 `Local.kt` / `GM.js`。
+- **只发 arm64-v8a**：发布产物仅包含 arm64-v8a 切片，其他架构需要自行构建。
+- **无 CI 测试阶段**：如前述，测试靠本地执行，仓库不保证每次提交都经过完整验证。
+- **依赖 Xposed 生态**：模块行为会随 LSPosed / LSPatch / Vector 的版本变化而波动，某些 ROM 的后台限制也会影响模块进程的存活。
+- **AI 生成的代码**：这是本分支最需要你警惕的一条，见开头的警告。
 
-Please report vulnerabilities privately as described in [SECURITY.md](SECURITY.md). Do not open a public issue for a security problem.
+## 路线图
 
-## License
+以下能力是当前正在推进的方向，**尚未包含在已发布版本中**，列在这里是为了让使用者知道后续会往哪里走，而不是把它们当作已有功能：
 
-ChromeXt is distributed under the terms in [LICENSE](LICENSE).
+- 界面全面支持中文；
+- 原生脚本管理面板按「已 Hook 的应用」分别管理脚本；
+- 检查脚本更新；
+- 查看已 Hook 的应用列表；
+- 暗色模式支持手动切换（目前仅跟随系统）；
+- 新增「关于」页，展示本分支与上游仓库的 GitHub 链接以及当前版本号。
+
+## 反馈与贡献
+
+请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。简单说：行为变更要写清楚，纯逻辑改动要配测试，提交前跑一遍 `./gradlew format` 和本地检查。手动构建工作流必须能产出已签名的 `ChromeXt-arm64-v8a.apk`。
+
+再次提醒：**所有问题请提到本仓库**。上游项目与本分支无关，请不要向上游提交本分支的 issue、PR 或安全报告。
+
+## 安全
+
+如果发现安全问题，请按照 [SECURITY.md](SECURITY.md) 的说明私下报告，不要开公开 issue。
+
+## 许可证
+
+ChromeXt 依据 [LICENSE](LICENSE)（GNU GPL v3）分发。本分支同样遵循该许可证；你在分发修改版本时，也需要遵守 GPL 的相应义务。
