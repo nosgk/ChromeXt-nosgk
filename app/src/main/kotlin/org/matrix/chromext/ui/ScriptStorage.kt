@@ -95,7 +95,8 @@ object ScriptStorage {
             "      echo \"\$f|\$s|\$t\"\n" +
             "    fi\n" +
             "  done\n" +
-            "done"
+            "done\n" +
+            "exit 0"
 
     val result = runSu(command, 15)
     if (result.timedOut || result.exitCode != 0) {
