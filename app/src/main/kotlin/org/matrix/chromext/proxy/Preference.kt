@@ -13,6 +13,7 @@ import org.matrix.chromext.Chrome
 import org.matrix.chromext.Listener
 import org.matrix.chromext.script.Local
 import org.matrix.chromext.script.ScriptDbManager
+import org.matrix.chromext.ui.ManagerLauncher
 import org.matrix.chromext.utils.Log
 import org.matrix.chromext.utils.findField
 import org.matrix.chromext.utils.findMethod
@@ -167,6 +168,10 @@ object PreferenceProxy {
             "eruda" to
                 fun(_: Any) {
                   Listener.on("updateEruda")
+                },
+            "manager" to
+                fun(_: Any) {
+                  ManagerLauncher.open(ctx)
                 },
             "exit" to
                 fun(_: Any) {

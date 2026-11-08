@@ -63,7 +63,17 @@ The implementations live in [Local.kt](app/src/main/kotlin/org/matrix/chromext/s
 
 ### Script management
 
-Until the native manager ships, scripts can be managed through the hosted front end linked in the page menu. The native manager (installed scripts, enable/disable, editing, per-script settings, `GM_storage`, import/export) is tracked in [CHANGELOG.md](CHANGELOG.md).
+ChromeXt ships a native manager (Jetpack Compose). Open it from the launcher, from the LSPosed module card (the settings button), from the browser page menu (`Script manager`), or from Chrome's Developer options.
+
+The manager supports:
+
+- installed-script list with search, filters, sorting and one-tap enable/disable;
+- a code editor plus per-script settings (`@run-at`, custom `@match`/`@include`/`@exclude`, update URL);
+- a `GM_storage` inspector/editor;
+- install confirmation with target sites, requested permissions and a code preview;
+- ZIP backup and restore (ChromeXt format and plain `.user.js` archives).
+
+Scripts live in a central database inside the module and are migrated once from each browser's legacy database. If the module process is unavailable (for example, an OEM background restriction), browsers fall back to their local database.
 
 ### Edit before installing
 
@@ -74,7 +84,8 @@ If you cancel the installation prompt, you can edit the script directly in the p
 The three-dot page menu offers:
 
 1. `Developer tools` for the ChromeXt front end;
-2. `Eruda console` for regular pages.
+2. `Script manager` to open the native panel;
+3. `Eruda console` for regular pages.
 
 For WebView-based browsers and Chromium forks with their own page menu (for example Herond and Whale), these entries appear in the context menu.
 

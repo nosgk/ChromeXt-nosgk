@@ -5,13 +5,13 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import org.matrix.chromext.Chrome
-import org.matrix.chromext.Listener
 import org.matrix.chromext.R
 import org.matrix.chromext.menu.MenuEntryPolicy
 import org.matrix.chromext.menu.PageKind
 import org.matrix.chromext.proxy.PageInfoProxy
 import org.matrix.chromext.proxy.UserScriptProxy
 import org.matrix.chromext.script.Local
+import org.matrix.chromext.ui.ManagerLauncher
 import org.matrix.chromext.utils.*
 
 object PageInfoHook : BaseHook() {
@@ -44,7 +44,7 @@ object PageInfoHook : BaseHook() {
       label.setText(MenuEntryPolicy.titleRes(url))
       fun activate() {
         when (MenuEntryPolicy.kindOf(url)) {
-          PageKind.FRONT_END -> Listener.on("inspectPages")
+          PageKind.FRONT_END -> ManagerLauncher.open(Chrome.getContext(), url)
           PageKind.USER_SCRIPT -> {
             val sandBoxed = shouldBypassSandbox(url)
             Chrome.evaluateJavascript(

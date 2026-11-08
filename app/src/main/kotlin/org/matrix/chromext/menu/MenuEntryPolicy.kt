@@ -45,7 +45,7 @@ object MenuEntryPolicy {
                 ),
                 MenuEntry(
                     R.id.extension_id,
-                    R.string.main_menu_extension,
+                    R.string.main_menu_script_manager,
                     R.drawable.ic_extension,
                 ),
             )

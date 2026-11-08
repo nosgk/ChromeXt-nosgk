@@ -40,9 +40,15 @@ object PreferenceHook : BaseHook() {
             if (it.thisObject::class.java == proxy.developerSettings) {
               val refThis = it
               val preferences = mutableMapOf<String, Any>()
-              arrayOf("eruda", "gesture_mod", "keep_storage", "bookmark", "reset", "exit").forEach {
-                preferences[it] = proxy.findPreference.invoke(refThis.thisObject, it)!!
-              }
+              arrayOf(
+                      "eruda",
+                      "gesture_mod",
+                      "keep_storage",
+                      "bookmark",
+                      "manager",
+                      "reset",
+                      "exit")
+                  .forEach { preferences[it] = proxy.findPreference.invoke(refThis.thisObject, it)!! }
               proxy.setClickListener(preferences.toMap())
             }
           }

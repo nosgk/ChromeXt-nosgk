@@ -14,11 +14,11 @@ import de.robv.android.xposed.XC_MethodHook.Unhook
 import java.lang.Class
 import java.lang.ref.WeakReference
 import org.matrix.chromext.Chrome
-import org.matrix.chromext.Listener
 import org.matrix.chromext.R
 import org.matrix.chromext.Resource
 import org.matrix.chromext.menu.MenuEntryPolicy
 import org.matrix.chromext.script.Local
+import org.matrix.chromext.ui.ManagerLauncher
 import org.matrix.chromext.utils.*
 
 object ContextMenuHook : BaseHook() {
@@ -37,7 +37,7 @@ object ContextMenuHook : BaseHook() {
       }
     }
     if (isChromeXtFrontEnd(url)) {
-      Listener.on("inspectPages")
+      ManagerLauncher.open(Chrome.getContext(), url)
     } else if (isUserScript(url)) {
       val sandBoxed = shouldBypassSandbox(url)
       Chrome.evaluateJavascript(listOf("Symbol.installScript(true);"), null, null, sandBoxed)

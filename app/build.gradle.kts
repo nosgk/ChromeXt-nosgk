@@ -1,4 +1,7 @@
-plugins { id("com.android.application") }
+plugins {
+  id("com.android.application")
+  id("org.jetbrains.kotlin.plugin.compose")
+}
 
 android {
   compileSdk = 35
@@ -12,7 +15,10 @@ android {
     versionName = "3.9.1"
   }
 
-  buildFeatures { buildConfig = true }
+  buildFeatures {
+    buildConfig = true
+    compose = true
+  }
 
   buildTypes {
     release {
@@ -43,4 +49,19 @@ android {
   }
 }
 
-dependencies { compileOnly("de.robv.android.xposed:api:82") }
+dependencies {
+  compileOnly("de.robv.android.xposed:api:82")
+
+  val composeBom = platform("androidx.compose:compose-bom:2025.06.01")
+  implementation(composeBom)
+  implementation("androidx.compose.ui:ui")
+  implementation("androidx.compose.foundation:foundation")
+  implementation("androidx.compose.material3:material3")
+  implementation("androidx.compose.material:material-icons-core")
+  implementation("androidx.activity:activity-compose:1.10.1")
+  implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+
+  debugImplementation("androidx.compose.ui:ui-tooling")
+
+  testImplementation("junit:junit:4.13.2")
+}

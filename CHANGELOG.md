@@ -14,6 +14,12 @@ All notable changes to this fork are documented here. The format follows [Keep a
 - Central script database exposed to browser processes through `ScriptContentProvider`, with a one-time legacy migration and a local fallback when the provider is unreachable.
 - UserScript metadata parsing for `@version`, `@author`, `@description`, `@icon`, `@updateURL` and `@run-at`.
 - `@run-at` and match/exclude overrides are applied at injection time.
+- Native script manager (Jetpack Compose): installed list, search/filter/sort, enable/disable, code editor, per-script overrides, `GM_storage`, install confirmation and ZIP backup/restore.
+- Browser page menus and Chrome's Developer options now open the native manager instead of the hosted front end.
+
+### Changed
+
+- The APK now includes AndroidX Compose. Release size is budgeted at 8 MiB; the module has no native libraries and remains architecture-independent.
 
 ### Changed
 

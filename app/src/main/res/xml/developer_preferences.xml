@@ -13,6 +13,10 @@ found in the LICENSE file.
 	<Preference
 		android:key="eruda"
 		android:title="Update eruda console" />
+	<Preference
+		android:key="manager"
+		android:title="Script manager"
+		android:summary="Open the native ChromeXt panel" />
 	<org.chromium.components.browser_ui.settings.ChromeSwitchPreference
 		android:key="gesture_mod"
 		android:title="Browser gesture navigation"

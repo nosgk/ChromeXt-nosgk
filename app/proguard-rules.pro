@@ -3,4 +3,7 @@
 -keep class org.matrix.chromext.MainHook {
     public <init>();
 }
+-keep class org.matrix.chromext.ui.MainActivity { *; }
+-keep class org.matrix.chromext.ui.InstallScriptActivity { *; }
+-keep class org.matrix.chromext.provider.ScriptContentProvider { *; }
 -keepattributes SourceFile,LineNumberTable

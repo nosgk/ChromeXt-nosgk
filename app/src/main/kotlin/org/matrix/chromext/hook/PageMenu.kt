@@ -21,6 +21,7 @@ import org.matrix.chromext.menu.MenuEntryPolicy
 import org.matrix.chromext.proxy.PageMenuProxy
 import org.matrix.chromext.proxy.UserScriptProxy
 import org.matrix.chromext.script.Local
+import org.matrix.chromext.ui.ManagerLauncher
 import org.matrix.chromext.utils.*
 
 enum class AppMenuItemType(val value: Int) {
@@ -119,7 +120,7 @@ object PageMenuHook : BaseHook() {
       }
       when (ctx.resources.getResourceName(id)) {
         "org.matrix.chromext:id/extension_id" -> {
-          Listener.on("extension")
+          ManagerLauncher.open(ctx, getUrl())
         }
         "org.matrix.chromext:id/install_script_id" -> {
           val sandBoxed = shouldBypassSandbox(getUrl())
