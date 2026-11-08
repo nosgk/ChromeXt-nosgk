@@ -198,6 +198,10 @@ node --test tools/js-tests/*.test.js
 - **应用页需要读取已安装应用列表**：为支持把脚本限定到任意宿主，模块声明了 `QUERY_ALL_PACKAGES`；应用页只会展示应用名称、包名、版本与图标。
 - **AI 生成的代码**：这是本分支最需要你警惕的一条，见开头的警告。
 
+## 3.14.1 更新内容
+
+- 修复「修改引擎开关后重启 Chrome，打开任何网页都崩溃」：应用引擎配置时在 Chromium 浏览器进程里调用了 `WebView.setWebContentsDebuggingEnabled`，会在 Chrome 进程内初始化 WebView Provider 并导致崩溃。现在只在真正的 WebView 宿主（`WebViewHook.isInit`）里、主线程上调用，整个配置应用过程也加了保护。
+
 ## 3.14.0 更新内容
 
 - 修复 Vector 2.x 下读不到 LSPosed 作用域的问题：Vector 的库结构是 `scope(module_pkg_name, app_pkg_name, user_id)`、`modules(module_pkg_name, apk_path)`，没有 `mid` 列，旧的 JOIN 查询会直接报错。现在按 `PRAGMA table_info` 自动识别两代结构，并优先使用实时配置而不是 `config_backup`。

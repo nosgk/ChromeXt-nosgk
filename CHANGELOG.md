@@ -2,6 +2,12 @@
 
 All notable changes to this fork are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the module's `versionName`.
 
+## [3.14.1] - 2026-11-08
+
+### Fixed
+
+- Chrome crashing on every page after changing an engine switch and restarting: applying the engine config called `WebView.setWebContentsDebuggingEnabled` inside Chromium browser processes, which initializes the WebView provider there and takes Chrome down. The call is now limited to actual WebView hosts (`WebViewHook.isInit`) and posted to the main thread; the whole config application is also guarded.
+
 ## [3.14.0] - 2026-11-08
 
 ### Fixed
@@ -155,7 +161,8 @@ All notable changes to this fork are documented here. The format follows [Keep a
 - Support for the MVC page menu design.
 - Loading-state tracking for browsers where `mIsLoading` cannot be located.
 
-[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.14.0...HEAD
+[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.14.1...HEAD
+[3.14.1]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.14.1
 [3.14.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.14.0
 [3.13.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.13.0
 [3.12.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.12.0

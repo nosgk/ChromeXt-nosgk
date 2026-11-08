@@ -2,12 +2,15 @@ package org.matrix.chromext.script
 
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.webkit.WebView
 import java.util.concurrent.CopyOnWriteArrayList
 import org.json.JSONArray
 import org.json.JSONObject
 import org.matrix.chromext.Chrome
 import org.matrix.chromext.bridge.JsBridge
+import org.matrix.chromext.hook.WebViewHook
 import org.matrix.chromext.menu.MenuEntryPolicy
 import org.matrix.chromext.utils.Log
 import org.matrix.chromext.utils.invokeMethod
@@ -163,12 +166,24 @@ object ScriptDbManager {
    * them, so a change takes effect on the next sync (page load / 30 s throttle).
    */
   private fun applyConfig(values: Map<String, String>) {
-    val updated = EngineConfig.from(values)
-    if (updated == engine) return
-    engine = updated
-    keepStorage = updated.keepStorage
-    MenuEntryPolicy.erudaEnabled = updated.erudaEnabled
-    runCatching { WebView.setWebContentsDebuggingEnabled(updated.webViewDebug) }
+    runCatching {
+          val updated = EngineConfig.from(values)
+          if (updated == engine) return
+          val previous = engine
+          engine = updated
+          keepStorage = updated.keepStorage
+          MenuEntryPolicy.erudaEnabled = updated.erudaEnabled
+          // Only WebView hosts may touch the WebView API. Calling
+          // setWebContentsDebuggingEnabled in a Chromium browser process initializes the WebView
+          // provider there and crashes Chrome, and it must also run on the main thread.
+          if (WebViewHook.isInit && updated.webViewDebug != previous.webViewDebug) {
+            Handler(Looper.getMainLooper())
+                .post {
+                  runCatching { WebView.setWebContentsDebuggingEnabled(updated.webViewDebug) }
+                      .onFailure { Log.ex(it) }
+                }
+          }
+        }
         .onFailure { Log.ex(it) }
   }
 
