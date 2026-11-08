@@ -103,8 +103,13 @@ fun ChromeXtApp(activeUrl: String?, editId: String?) {
               script = current.script,
               onCancel = { screen = Screen.List },
               onSave = { updated ->
+                if (updated.id != current.script.id) {
+                  repository.delete(arrayOf(current.script.id))
+                }
                 repository.save(updated)
-                scripts = scripts.map { if (it.id == updated.id) updated else it }
+                scripts =
+                    scripts.filterNot { it.id == current.script.id || it.id == updated.id } +
+                        updated
                 screen = Screen.List
               },
           )
