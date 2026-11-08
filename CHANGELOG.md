@@ -2,6 +2,12 @@
 
 All notable changes to this fork are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the module's `versionName`.
 
+## [3.14.2] - 2026-11-09
+
+### Fixed
+
+- Root shell resolution. `ProcessBuilder("su")` failed with `Cannot run program "su": error=2, No such file or directory` on devices whose root manager does not put `su` on the app's PATH (KernelSU: `/data/adb/ksu/bin/su`, APatch: `/data/adb/ap/bin/su`, Magisk: `/debug_ramdisk/su`). The storage scan, LSPosed scope reader and the root restart button now resolve an absolute path first, then PATH, then `sh -c 'command -v su'`.
+
 ## [3.14.1] - 2026-11-08
 
 ### Fixed
@@ -163,7 +169,8 @@ All notable changes to this fork are documented here. The format follows [Keep a
 - Support for the MVC page menu design.
 - Loading-state tracking for browsers where `mIsLoading` cannot be located.
 
-[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.14.1...HEAD
+[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.14.2...HEAD
+[3.14.2]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.14.2
 [3.14.1]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.14.1
 [3.14.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.14.0
 [3.13.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.13.0

@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit
 import org.matrix.chromext.script.ScriptRecord
 import org.matrix.chromext.script.parseScript
 import org.matrix.chromext.utils.Log
+import org.matrix.chromext.utils.Su
 
 /** One browser-local `userscript` database, as seen through `su`. */
 data class LocalScriptDatabase(
@@ -243,44 +244,47 @@ object ScriptStorage {
       val timedOut: Boolean,
   )
 
-  private fun runSu(command: String, timeoutSeconds: Long): SuResult =
-      runCatching {
-            val process =
-                ProcessBuilder("su", "-c", command).redirectErrorStream(true).start()
-            val bytes = process.inputStream.use { it.readBytes() }
-            val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-            if (!finished) {
-              process.destroy()
-              SuResult(String(bytes, Charsets.UTF_8), -1, timedOut = true)
-            } else {
-              SuResult(String(bytes, Charsets.UTF_8), process.exitValue(), timedOut = false)
-            }
+  private fun runSu(command: String, timeoutSeconds: Long): SuResult {
+    val su = Su.path() ?: return SuResult("su not found", -1, timedOut = false)
+    return runCatching {
+          val process = ProcessBuilder(su, "-c", command).redirectErrorStream(true).start()
+          val bytes = process.inputStream.use { it.readBytes() }
+          val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
+          if (!finished) {
+            process.destroy()
+            SuResult(String(bytes, Charsets.UTF_8), -1, timedOut = true)
+          } else {
+            SuResult(String(bytes, Charsets.UTF_8), process.exitValue(), timedOut = false)
           }
-          .getOrElse { SuResult(it.message ?: "su failed", -1, timedOut = false) }
+        }
+        .getOrElse { SuResult(it.message ?: "su failed", -1, timedOut = false) }
+  }
 
-  private fun copyFile(path: String, target: File, requireSqliteHeader: Boolean): Boolean =
-      runCatching {
-            val process =
-                ProcessBuilder("su", "-c", "cat $path 2>/dev/null")
-                    .redirectErrorStream(true)
-                    .start()
-            val bytes = process.inputStream.use { it.readBytes() }
-            val finished = process.waitFor(5, TimeUnit.SECONDS)
-            if (!finished) process.destroy()
-            if (bytes.size < 16) return@runCatching false
-            val payload =
-                if (requireSqliteHeader) {
-                  val header = "SQLite format 3\u0000".toByteArray(Charsets.ISO_8859_1)
-                  val offset = indexOf(bytes, header)
-                  if (offset < 0) return@runCatching false
-                  bytes.copyOfRange(offset, bytes.size)
-                } else {
-                  bytes
-                }
-            target.writeBytes(payload)
-            true
-          }
-          .getOrDefault(false)
+  private fun copyFile(path: String, target: File, requireSqliteHeader: Boolean): Boolean {
+    val su = Su.path() ?: return false
+    return runCatching {
+          val process =
+              ProcessBuilder(su, "-c", "cat $path 2>/dev/null")
+                  .redirectErrorStream(true)
+                  .start()
+          val bytes = process.inputStream.use { it.readBytes() }
+          val finished = process.waitFor(5, TimeUnit.SECONDS)
+          if (!finished) process.destroy()
+          if (bytes.size < 16) return@runCatching false
+          val payload =
+              if (requireSqliteHeader) {
+                val header = "SQLite format 3\u0000".toByteArray(Charsets.ISO_8859_1)
+                val offset = indexOf(bytes, header)
+                if (offset < 0) return@runCatching false
+                bytes.copyOfRange(offset, bytes.size)
+              } else {
+                bytes
+              }
+          target.writeBytes(payload)
+          true
+        }
+        .getOrDefault(false)
+  }
 
   private fun indexOf(haystack: ByteArray, needle: ByteArray): Int {
     if (needle.isEmpty() || haystack.size < needle.size) return -1

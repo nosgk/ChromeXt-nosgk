@@ -5,6 +5,7 @@ import android.database.sqlite.SQLiteDatabase
 import java.io.File
 import java.util.concurrent.TimeUnit
 import org.matrix.chromext.utils.Log
+import org.matrix.chromext.utils.Su
 
 enum class ScopeStatus {
   /** The scope was read successfully. */
@@ -102,8 +103,8 @@ object LsposedScope {
 
   private fun hasRoot(): Boolean =
       runCatching {
-            val process =
-                ProcessBuilder("su", "-c", "id").redirectErrorStream(true).start()
+            val su = Su.path() ?: return@runCatching false
+            val process = ProcessBuilder(su, "-c", "id").redirectErrorStream(true).start()
             val finished = process.waitFor(4, TimeUnit.SECONDS)
             if (!finished) {
               process.destroy()
@@ -116,20 +117,23 @@ object LsposedScope {
 
   private fun discoverPaths(): List<String> {
     val found = linkedSetOf<String>()
-    runCatching {
-      val process =
-          ProcessBuilder("su", "-c", "find /data/adb -name $DB_NAME 2>/dev/null")
-              .redirectErrorStream(true)
-              .start()
-      if (process.waitFor(6, TimeUnit.SECONDS)) {
-        process.inputStream.bufferedReader().useLines { lines ->
-          lines
-              .map { it.trim() }
-              .filter { it.startsWith("/") && it.endsWith(DB_NAME) }
-              .forEach { found += it }
+    val su = Su.path()
+    if (su != null) {
+      runCatching {
+        val process =
+            ProcessBuilder(su, "-c", "find /data/adb -name $DB_NAME 2>/dev/null")
+                .redirectErrorStream(true)
+                .start()
+        if (process.waitFor(6, TimeUnit.SECONDS)) {
+          process.inputStream.bufferedReader().useLines { lines ->
+            lines
+                .map { it.trim() }
+                .filter { it.startsWith("/") && it.endsWith(DB_NAME) }
+                .forEach { found += it }
+          }
+        } else {
+          process.destroy()
         }
-      } else {
-        process.destroy()
       }
     }
     if (found.isEmpty()) found += CANDIDATES
@@ -146,29 +150,31 @@ object LsposedScope {
     return true
   }
 
-  private fun copyFile(path: String, target: File, requireSqliteHeader: Boolean): Boolean =
-      runCatching {
-            val process =
-                ProcessBuilder("su", "-c", "cat $path 2>/dev/null")
-                    .redirectErrorStream(true)
-                    .start()
-            val bytes = process.inputStream.use { it.readBytes() }
-            val finished = process.waitFor(5, TimeUnit.SECONDS)
-            if (!finished) process.destroy()
-            if (bytes.size < 16) return@runCatching false
-            val payload =
-                if (requireSqliteHeader) {
-                  val header = "SQLite format 3\u0000".toByteArray(Charsets.ISO_8859_1)
-                  val offset = indexOf(bytes, header)
-                  if (offset < 0) return@runCatching false
-                  bytes.copyOfRange(offset, bytes.size)
-                } else {
-                  bytes
-                }
-            target.writeBytes(payload)
-            true
-          }
-          .getOrDefault(false)
+  private fun copyFile(path: String, target: File, requireSqliteHeader: Boolean): Boolean {
+    val su = Su.path() ?: return false
+    return runCatching {
+          val process =
+              ProcessBuilder(su, "-c", "cat $path 2>/dev/null")
+                  .redirectErrorStream(true)
+                  .start()
+          val bytes = process.inputStream.use { it.readBytes() }
+          val finished = process.waitFor(5, TimeUnit.SECONDS)
+          if (!finished) process.destroy()
+          if (bytes.size < 16) return@runCatching false
+          val payload =
+              if (requireSqliteHeader) {
+                val header = "SQLite format 3\u0000".toByteArray(Charsets.ISO_8859_1)
+                val offset = indexOf(bytes, header)
+                if (offset < 0) return@runCatching false
+                bytes.copyOfRange(offset, bytes.size)
+              } else {
+                bytes
+              }
+          target.writeBytes(payload)
+          true
+        }
+        .getOrDefault(false)
+  }
 
   private fun indexOf(haystack: ByteArray, needle: ByteArray): Int {
     if (needle.isEmpty() || haystack.size < needle.size) return -1

@@ -69,6 +69,7 @@ import org.matrix.chromext.R
 import org.matrix.chromext.browser.BrowserCatalog
 import org.matrix.chromext.script.EngineConfig
 import org.matrix.chromext.script.ScriptDbHelper
+import org.matrix.chromext.utils.Su
 
 private data class Telemetry(
     val providerReady: Boolean,
@@ -962,10 +963,11 @@ private fun countOrphanStorage(repository: ScriptRepository): Int {
 
 private suspend fun restartBrowser(context: Context, packageName: String): Boolean =
     withContext(Dispatchers.IO) {
+      val su = Su.path() ?: return@withContext false
       runCatching {
             val process =
                 ProcessBuilder(
-                        "su",
+                        su,
                         "-c",
                         "am force-stop $packageName; monkey -p $packageName -c android.intent.category.LAUNCHER 1")
                     .redirectErrorStream(true)
