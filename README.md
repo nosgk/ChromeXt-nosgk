@@ -109,7 +109,7 @@ The canonical gate is the CI workflow: `validate` (format, lint, unit tests, JS 
 
 ```bash
 ./gradlew testDebugUnitTest
-node --test tools/js-tests
+node --test tools/js-tests/*.test.js
 ```
 
 See [TESTING.md](TESTING.md) for the test layout, device matrix and how to add fixtures.

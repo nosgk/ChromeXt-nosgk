@@ -134,14 +134,12 @@ fun ScriptListScreen(
                 ScriptSort.UPDATED -> compareByDescending { it.lastUpdated }
               })
 
+  val enabledCount = scripts.count { it.enabled }
   Scaffold(
       modifier = modifier,
       topBar = {
         Column {
-          TopAppBar(
-              title = {
-                Text("ChromeXt (${scripts.count { it.enabled }}/${scripts.size} enabled)")
-              })
+          TopAppBar(title = { Text("ChromeXt ($enabledCount/${scripts.size} enabled)") })
           OutlinedTextField(
               value = query,
               onValueChange = { query = it },

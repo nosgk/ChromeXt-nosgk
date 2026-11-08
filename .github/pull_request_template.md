@@ -12,7 +12,7 @@
 ## Verification
 
 - [ ] `./gradlew ktfmtCheck lintDebug testDebugUnitTest assembleDebug`
-- [ ] `node --test tools/js-tests` (if assets changed)
+- [ ] `node --test tools/js-tests/*.test.js` (if assets changed)
 - [ ] `python3 tools/docs/check_docs.py`
 - [ ] Manual CI run is green
 - [ ] Device/emulator check (browser, version, Android version)

@@ -51,14 +51,8 @@ function renderEditor(code, alertEncoding) {
   code.setAttribute("contenteditable", true);
   scriptMeta.setAttribute("spellcheck", false);
   code.setAttribute("spellcheck", false);
-  // Too many nodes heavily slow down the event-loop, should be improved
-  import("https://unpkg.com/@speed-highlight/core/dist/index.js").then(
-    (imports) => {
-      imports.highlightElement(code, "js", "multiline", {
-        hideLineNumbers: true,
-      });
-    }
-  );
+  // Syntax highlighting is intentionally omitted: the install editor must work offline and
+  // without loading a third-party script from a CDN.
 }
 
 function createDialog(msg) {

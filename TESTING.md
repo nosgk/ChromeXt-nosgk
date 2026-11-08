@@ -16,7 +16,7 @@
 ./gradlew testDebugUnitTest
 ./gradlew lintDebug
 ./gradlew ktfmtCheck
-node --test tools/js-tests
+node --test tools/js-tests/*.test.js
 python3 tools/docs/check_docs.py
 ```
 

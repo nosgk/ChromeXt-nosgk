@@ -18,7 +18,7 @@ The canonical build runs on GitHub Actions and is triggered manually. Local buil
 ```bash
 ./gradlew format
 ./gradlew ktfmtCheck lintDebug testDebugUnitTest assembleDebug
-node --test tools/js-tests
+node --test tools/js-tests/*.test.js
 python3 tools/docs/check_docs.py
 ```
 

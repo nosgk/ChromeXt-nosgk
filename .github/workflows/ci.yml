@@ -49,7 +49,7 @@ jobs:
       - name: JavaScript asset tests
         run: |
           if [ -d tools/js-tests ]; then
-            node --test tools/js-tests
+            node --test tools/js-tests/*.test.js
           else
             echo "tools/js-tests is not present yet; skipping"
           fi
