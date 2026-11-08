@@ -28,7 +28,9 @@ All notable changes to this fork are documented here. The format follows [Keep a
 
 - Rewrote the README for this fork: accurate badges, requirements, build/test commands and supported API summary.
 - Removed the stale development-plan list from the README; ongoing work is tracked in issues and this changelog.
-- Replaced the push-triggered workflow with a single manual `ci.yml`: `validate` must pass before `package` builds the arm64-v8a APK; signing is an optional, separately approved job.
+- Replaced the push-triggered workflow with a manual `build.yml` that builds, verifies and signs the arm64-v8a APK.
+- The build workflow now only packages and signs; the separate CI/validation stage was removed. Run `ktfmtCheck`, `lintDebug` and the tests locally.
+- Release signing uses a locally generated PKCS#12 keystore stored in the `release` environment secrets (`SIGNING_KEY`, `ALIAS`, `KEY_STORE_PASSWORD`, `KEY_PASSWORD`).
 - Pinned GitHub Actions to commit SHAs, added a concurrency group, job timeouts and read-only default permissions.
 - Release artifacts are named `ChromeXt-arm64-v8a.apk`; the APK contains no native libraries and remains architecture-independent.
 - Dependabot now covers both Gradle and GitHub Actions with grouped weekly updates.

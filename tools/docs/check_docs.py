@@ -21,7 +21,7 @@ REQUIRED = [
     "TESTING.md",
     "SECURITY.md",
     "CHANGELOG.md",
-    ".github/workflows/ci.yml",
+    ".github/workflows/build.yml",
 ]
 
 errors: list[str] = []
@@ -72,8 +72,8 @@ def check_action_pins() -> None:
 
 def check_readme() -> None:
     readme = read(ROOT / "README.md")
-    if "github.com/nosgk/ChromeXt-nosgk/actions/workflows/ci.yml" not in readme:
-        fail("README.md: CI badge does not point at this repository's ci.yml")
+    if "github.com/nosgk/ChromeXt-nosgk/actions/workflows/build.yml" not in readme:
+        fail("README.md: build badge does not point at this repository's build.yml")
     if "JingMatrix/ChromeXt/actions" in readme:
         fail("README.md: stale upstream CI badge")
     if "arm64-v8a" not in readme:
@@ -128,10 +128,10 @@ def check_local_links() -> None:
 
 
 def check_ci_scripts() -> None:
-    ci = read(WORKFLOWS / "ci.yml")
+    ci = read(WORKFLOWS / "build.yml")
     for script in ["scripts/verify-release.sh", "scripts/sign-apk.sh"]:
         if script in ci and not (ROOT / script).exists():
-            fail(f"ci.yml references missing script: {script}")
+            fail(f"build.yml references missing script: {script}")
 
 
 def check_no_internal_docs() -> None:

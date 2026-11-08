@@ -1,6 +1,6 @@
 # ChromeXt
 
-[![CI](https://github.com/nosgk/ChromeXt-nosgk/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/nosgk/ChromeXt-nosgk/actions/workflows/ci.yml)
+[![Build](https://github.com/nosgk/ChromeXt-nosgk/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/nosgk/ChromeXt-nosgk/actions/workflows/build.yml)
 [![Release](https://img.shields.io/github/v/release/nosgk/ChromeXt-nosgk?color=orange&label=Download)](https://github.com/nosgk/ChromeXt-nosgk/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/nosgk/ChromeXt-nosgk/total?label=Downloads&color=yellow)](https://github.com/nosgk/ChromeXt-nosgk/releases)
 
@@ -91,7 +91,9 @@ For WebView-based browsers and Chromium forks with their own page menu (for exam
 
 ## Build
 
-Builds run on GitHub Actions only; the workflow is **manual** (`workflow_dispatch`) and is never triggered by a push. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
+Builds run on GitHub Actions only; the workflow is **manual** (`workflow_dispatch`) and is never triggered by a push. See [.github/workflows/build.yml](.github/workflows/build.yml).
+
+The workflow builds `assembleRelease`, verifies the Xposed entry point and the arm64-v8a slice, signs the APK with the keystore stored in the `release` environment, and uploads `ChromeXt-arm64-v8a.apk` with a SHA256 checksum. It intentionally has **no separate CI/test stage**; run the checks below locally.
 
 Local development still works if you have JDK 21 and Android SDK 35 installed:
 
@@ -103,7 +105,9 @@ Local development still works if you have JDK 21 and Android SDK 35 installed:
 ./gradlew assembleDebug
 ```
 
-The canonical gate is the CI workflow: `validate` (format, lint, unit tests, JS tests, debug build) must pass before `package` (release build, Xposed entry-point check, optional signing, checksums) runs.
+### Release signing
+
+The `release` environment holds four secrets: `SIGNING_KEY` (base64 PKCS#12 keystore), `ALIAS`, `KEY_STORE_PASSWORD` and `KEY_PASSWORD`. The keystore is not in the repository. Rotating the key requires updating the secrets; users must uninstall and reinstall to switch signatures.
 
 ## Test
 
@@ -116,7 +120,7 @@ See [TESTING.md](TESTING.md) for the test layout, device matrix and how to add f
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md). In short: keep behavior changes explicit, add tests for pure logic, run `./gradlew format`, and make sure the manual CI run is green before merging.
+Read [CONTRIBUTING.md](CONTRIBUTING.md). In short: keep behavior changes explicit, add tests for pure logic, run `./gradlew format`, and run the local checks before merging. The manual build workflow must produce a signed `ChromeXt-arm64-v8a.apk`.
 
 Useful entry points:
 

@@ -20,6 +20,8 @@ node --test tools/js-tests/*.test.js
 python3 tools/docs/check_docs.py
 ```
 
+The manual build workflow does not run this stage; these commands are the gate for local changes.
+
 Coverage reports are written to `app/build/reports/jacoco/`.
 
 ## What to test

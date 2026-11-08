@@ -59,6 +59,7 @@ fi
 mkdir -p "$(dirname "$OUTPUT")"
 
 "$APKSIGNER" sign \
+  --ks-type PKCS12 \
   --ks "$KEYSTORE" \
   --ks-key-alias "$KEYSTORE_ALIAS" \
   --ks-pass "env:KEYSTORE_PASSWORD" \

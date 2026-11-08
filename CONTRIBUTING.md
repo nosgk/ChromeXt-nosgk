@@ -53,7 +53,7 @@ Rules:
 - One logical change per pull request.
 - Include tests for pure logic (parsers, URL matching, repositories, policies).
 - Include a device/emulator verification note for hook or UI changes: browser, version, Android version, and what you checked.
-- Make sure the manual CI run is green before merging.
+- Run the local checks (`ktfmtCheck`, `lintDebug`, `testDebugUnitTest`, JavaScript tests) before merging. The manual build workflow only packages and signs the APK; it does not run a CI stage.
 
 ## Reporting bugs
 

@@ -14,7 +14,8 @@
 - [ ] `./gradlew ktfmtCheck lintDebug testDebugUnitTest assembleDebug`
 - [ ] `node --test tools/js-tests/*.test.js` (if assets changed)
 - [ ] `python3 tools/docs/check_docs.py`
-- [ ] Manual CI run is green
+- [ ] Local checks pass (`ktfmtCheck`, `lintDebug`, `testDebugUnitTest`, JS tests)
+- [ ] Manual build workflow produces a signed APK
 - [ ] Device/emulator check (browser, version, Android version)
 
 ## Checklist
