@@ -1,1 +1,13 @@
-app/src/main/assets/*.js  text=auto eol=lf
+# Normalize text files so CI (Linux) and Windows checkouts agree.
+* text=auto eol=lf
+
+# Windows scripts keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Shell scripts and the Gradle wrapper must be executable with LF endings.
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Injected assets are compared byte-for-byte by tests.
+app/src/main/assets/*.js text=auto eol=lf

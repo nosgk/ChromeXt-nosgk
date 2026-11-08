@@ -1,197 +1,123 @@
 # ChromeXt
 
-[![Build](https://img.shields.io/github/actions/workflow/status/JingMatrix/ChromeXt/android.yml?branch=master&logo=github&label=Build&event=push)](https://github.com/JingMatrix/ChromeXt/actions/workflows/android.yml?query=event%3Apush+is%3Acompleted+branch%3Amaster) [![Download](https://img.shields.io/github/v/release/JingMatrix/ChromeXt?color=orange&logoColor=orange&label=Download&logo=DocuSign)](https://github.com/JingMatrix/ChromeXt/releases/latest) [![Total](https://shields.io/github/downloads/JingMatrix/ChromeXt/total?logo=Bookmeter&label=Counts&logoColor=yellow&color=yellow)](https://github.com/JingMatrix/ChromeXt/releases)
+[![CI](https://github.com/nosgk/ChromeXt-nosgk/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/nosgk/ChromeXt-nosgk/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/nosgk/ChromeXt-nosgk?color=orange&label=Download)](https://github.com/nosgk/ChromeXt-nosgk/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/nosgk/ChromeXt-nosgk/total?label=Downloads&color=yellow)](https://github.com/nosgk/ChromeXt-nosgk/releases)
 
-Add UserScript and DevTools supports to Chromium based and WebView based browsers using Xposed framework.
+Add UserScript and DevTools support to Chromium-based and WebView-based Android browsers using the Xposed framework.
 
-##  How does it work?
+This repository is a fork of [JingMatrix/ChromeXt](https://github.com/JingMatrix/ChromeXt), maintained by [nosgk](https://github.com/nosgk). The upstream project remains the reference implementation; this fork focuses on engineering hardening, a native script manager, and reproducible builds.
 
-We hook the `onUpdateUrl` function in [UserScript.kt](app/src/main/kotlin/org/matrix/chromext/hook/UserScript.kt),
-add URL comparison there and evaluate JavaScript using the `javascript:` scheme (or DevTools Protocol when possible).
+## How it works
 
-Chromium based browsers,
-such as [Bromite](https://github.com/bromite/bromite),
-and [Brave](https://github.com/brave/brave-browser), are fully supported.
+ChromeXt hooks `onUpdateUrl` in [UserScript.kt](app/src/main/kotlin/org/matrix/chromext/hook/UserScript.kt), compares the current URL with installed UserScripts, and evaluates JavaScript through the `javascript:` scheme or the DevTools protocol when available.
 
-Most WebView based browsers are also supported, if not, please report it.
-Note for WebView based browsers users: you _only_ need to enable this module for the browser application you wish to use, _not_ for any possible WebView applications, _neither_ for the Android system.
+Chromium-based browsers such as Chrome, Brave, Vivaldi, Whale, Bromite, Cromite, Thorium and others are supported. Most WebView-based browsers are supported as well; if yours is not, please open an issue.
+
+> WebView users: enable this module only for the browser application you want to use, not for every WebView host and not for the Android system.
+
+## Requirements
+
+- Android 5.0+ (API 21+), arm64-v8a device recommended.
+- Xposed framework:
+  - Root users: [Vector](https://github.com/JingMatrix/Vector) or LSPosed.
+  - Non-root users: a patched [LSPatch](https://github.com/JingMatrix/LSPatch) build.
+
+The module APK contains no native libraries, so it is architecture-independent. Release artifacts are published as `ChromeXt-arm64-v8a.apk` to match the recommended device class.
+
+## Install
+
+1. Download the latest `ChromeXt-arm64-v8a.apk` from [Releases](https://github.com/nosgk/ChromeXt-nosgk/releases/latest).
+2. Install it and enable the module in your Xposed manager.
+3. Scope the module to the browsers you use.
+4. Reboot the browser process (force stop or reboot).
+
+Non-root LSPatch flow:
+
+1. Download a patched `lspatch.jar` and `ChromeXt-signed.apk`.
+2. Patch the target browser: `java -jar lspatch.jar <browser.apk> -d -v -m ChromeXt-signed.apk --force --injectdex`.
+3. Install the patched browser (you may need to uninstall the original first).
 
 ## Usage
 
-<p align="center"><a href="https://www.youtube.com/watch?v=1Qm4dU-XnJM"><img src="https://img.youtube.com/vi/1Qm4dU-XnJM/0.jpg" /></a></p>
+Install UserScripts by opening URLs that end with `.user.js`, or by sharing a JavaScript file to ChromeXt.
 
-ChromeXt requires **Xposed framework**.
+### Supported UserScript APIs
 
-For root users, install [Vector](https://github.com/JingMatrix/Vector) first,
-pick up the latest built APK from my repo's [GitHub Actions](https://github.com/JingMatrix/ChromeXt/actions) and install it.
+ChromeXt implements most commonly used [Tampermonkey APIs](https://www.tampermonkey.net/documentation.php):
 
-For non-root users,
-I modify a bit [LSPatch](https://github.com/JingMatrix/LSPatch) to support `ChromeXt`; here is how to use it:
-1. Download the latest `lspatch-release` from my [GitHub Actions](https://github.com/JingMatrix/LSPatch/actions).
-2. Download the latest `ChromeXt.apk` from my [GitHub Actions](https://github.com/JingMatrix/ChromeXt/actions).
-3. Extract previously downloaded files to get files `lspatch.jar` (with some suffix) and `ChromeXt-signed.apk`.
-4. Patch your APK (taking `arm64_ChromePublic.apk` as example) using the following command: `java -jar lspatch.jar arm64_ChromePublic.apk -d -v -m ChromeXt-signed.apk --force --injectdex`. If `java` environment is not available, please consider using the provided `manager` APK (and check the `Inject loader dex` option).
-5. Install the patched APK, which might require you to first uninstall the one on your devices.
+- `@name` (colons are not allowed), `@namespace`, `@description`, `@version`, `@author`, `@icon`
+- `@match` (Chrome match-pattern syntax, regular expressions supported), `@include`, `@exclude`
+- `@run-at`: `document-start`, `document-end`, `document-idle` (default)
+- `@grant`: `GM_addStyle`, `GM_addElement`, `GM_xmlhttpRequest`, `GM_openInTab`, `GM_registerMenuCommand`, `GM_unregisterMenuCommand`, `GM_download`, `unsafeWindow`
+- `@grant`: `GM_setValue`, `GM_getValue`, `GM_listValues`, `GM_addValueChangeListener`, `GM_removeValueChangeListener`, `GM_setClipboard`, `GM_cookie`, `GM_notification`, `window.close`
+- `@require`, `@resource` (without Subresource Integrity)
+- `@inject-into`, `@sandbox`: imported scripts may define globals by default; set `@inject-into content` or `@sandbox DOM` to disable
+- `@noframes`: frame injection requires a main-page script with `@grant frames`
 
-Notes: currently _to download_ files from `GitHub Actions`, one needs to log in GitHub.
+The implementations live in [Local.kt](app/src/main/kotlin/org/matrix/chromext/script/Local.kt) and [GM.js](app/src/main/assets/GM.js). Behavior intentionally differs from Tampermonkey in a few places; check those files when in doubt.
 
-The author uploads releases to [Xposed-Modules-Repo](https://github.com/Xposed-Modules-Repo/org.matrix.chromext/releases) when needed, but not that frequently.
+### `GM.ChromeXt`
 
-You can then install UserScripts from popular sources: URLs that ends with `.user.js`.
+`GM.ChromeXt` is a powerful and dangerous API. It must be declared with `@grant GM.ChromeXt` to unlock. It exposes `ChromeXt.dispatch(action, payload)` to page scripts; actions are handled by [Listener.kt](app/src/main/kotlin/org/matrix/chromext/Listener.kt). It is locked by default so that a malicious UserScript cannot take over the browser integration.
 
-### Supported API
+### Script management
 
-Currently, ChromeXt supports almost all [Tampermonkey APIs](https://www.tampermonkey.net/documentation.php?locale=en):
+Until the native manager ships, scripts can be managed through the hosted front end linked in the page menu. The native manager (installed scripts, enable/disable, editing, per-script settings, `GM_storage`, import/export) is tracked in [CHANGELOG.md](CHANGELOG.md).
 
-1. @name (colons not allowed), @namespace, @description and so on
-2. @match (conform to the [Chrome Standard](https://developer.chrome.com/docs/extensions/mv2/match_patterns/), supports [regular expressions](https://developer.android.com/reference/java/util/regex/Pattern))
-3. @include = @match, @exclude
-4. @run-at: document-start, document-end, document-idle (the default and fallback value)
-5. @grant: GM_addStyle, GM_addElement, GM_xmlhttpRequest, GM_openInTab, GM_registerMenuCommand (shown in the `Resources` panel of eruda), GM_unregisterMenuCommand, GM_download, unsafeWindow (= window)
-6. @grant: GM_setValue, GM_getValue (less powerful than GM.getValue), GM_listValues, GM_addValueChangeListener, GM_removeValueChangeListener, GM_setClipboard, GM_cookie, GM_notification, window.close
-7. @require, @resource (without [Subresource Integrity](https://www.tampermonkey.net/documentation.php#api:Subresource_Integrity))
-8. @inject-into, @sandox: by default, imported scripts using `@require` can define/overwrite global JavaScript objects; one can set `@inject-into content` or `@sandbox DOM` to disable this behavior
-9. @noframes: note that, to load UserScripts for frames, there must be a script with `@grant frames` on the main page
+### Edit before installing
 
-These APIs are implemented differently from the official ones, please refer to the source files
-[Local.kt](app/src/main/kotlin/org/matrix/chromext/script/Local.kt) and
-[GM.js](app/src/main/assets/GM.js) if you have doubts or questions.
+If you cancel the installation prompt, you can edit the script directly in the page. Use the `Install UserScript` page menu entry afterwards to install the modified version.
 
-Moreover, there is the powerful (also dangerous) `GM.ChromeXt` API, which must be declared by `@grant GM.ChromeXt` to _unlock_ its usage.
-It is locked by default so that the users are protected from malicious UserScripts exploiting ChromeXt.
-This API allows scripts to use the JavaScript method `ChromeXt.dispatch(action, payload)`, which is fundamental to implement other APIs. (Hence, one can find usage examples in [GM.js](app/src/main/assets/GM.js)).
-Dispatched `action` and `payload` are handled by [Listener.kt](app/src/main/kotlin/org/matrix/chromext/Listener.kt).
+### DevTools and Eruda
 
-### UserScripts manager front end
+The three-dot page menu offers:
 
-To manage scripts installed by `ChromeXt`, here are a simple front end hosted on [matrix-transformation.dev](https://jing.matrix-transformation.dev/ChromeXt/) (also reachable through its former address [github.io](https://jingmatrix.github.io/ChromeXt/), which now redirects there) and two mirrors of it (in case that you have connection issues): [onrender.com](https://jianyu-ma.onrender.com/ChromeXt/), [netlify.app](https://jianyu-ma.netlify.app/ChromeXt/).
+1. `Developer tools` for the ChromeXt front end;
+2. `Eruda console` for regular pages.
 
-### Edit scripts before installing them
+For WebView-based browsers and Chromium forks with their own page menu (for example Herond and Whale), these entries appear in the context menu.
 
-If you cancel the prompt of installing a new UserScript, then you can edit it directly in Chrome.
-Use the `Install UserScript` page menu to install your modified UserScript.
+## Build
 
-### DevTools for developers
+Builds run on GitHub Actions only; the workflow is **manual** (`workflow_dispatch`) and is never triggered by a push. See [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
-From the three dots page menu, ChromeXt offers you the
-1. `Developer tools` menu for the UserScript manager front end,
-2. `Eruda console` menu for other pages.
+Local development still works if you have JDK 21 and Android SDK 35 installed:
 
-For WebView based browsers (and Chromium forks that ship their own page menu, such as Herond and Whale), these menu items are presented in the context menu.
+```bash
+./gradlew format          # apply ktfmt
+./gradlew ktfmtCheck      # verify formatting
+./gradlew lintDebug       # Android lint
+./gradlew testDebugUnitTest
+./gradlew assembleDebug
+```
 
-## Bonus
+The canonical gate is the CI workflow: `validate` (format, lint, unit tests, JS tests, debug build) must pass before `package` (release build, Xposed entry-point check, optional signing, checksums) runs.
 
-Since WebView based browsers have no unified designs, the following
-first four features are not supported for them.
+## Test
 
-### Open in Chrome
+```bash
+./gradlew testDebugUnitTest
+node --test tools/js-tests
+```
 
-The application `ChromeXt` is able to
-1. received shared texts to search them using `Google`,
-2. open JavaScript files to install them as UserScripts.
+See [TESTING.md](TESTING.md) for the test layout, device matrix and how to add fixtures.
 
-The reversed priority order of opening which Chromium based browsers is given in [AndroidManifest.xml](app/src/main/AndroidManifest.xml).
+## Contributing
 
-### Solution of system gesture conflicts
+Read [CONTRIBUTING.md](CONTRIBUTING.md). In short: keep behavior changes explicit, add tests for pure logic, run `./gradlew format`, and make sure the manual CI run is green before merging.
 
-By default, the history forward gesture of Chrome is available near the vertical center of screen.
-On other areas, only the system gesture is available.
-One can disable this behavior through the `Developer options` menu.
-(Tap seven times on the Chrome version from the Chrome settings, you will see the `Developer options` menu.)
-(In [Vivaldi](https://vivaldi.com/en/android/) browsers, `Developer options` menu is removed by its developers.)
+Useful entry points:
 
-### Enable reader mode manually
+1. Tampermonkey API: [Local.kt](app/src/main/kotlin/org/matrix/chromext/script/Local.kt) and [GM.js](app/src/main/assets/GM.js)
+2. Eruda configuration: [eruda.js](app/src/main/assets/eruda.js)
+3. WebView browser support: [WebView.kt](app/src/main/kotlin/org/matrix/chromext/hook/WebView.kt)
+4. Hook compatibility: [proxy/](app/src/main/kotlin/org/matrix/chromext/proxy) and [hook/](app/src/main/kotlin/org/matrix/chromext/hook)
 
-ChromeXt adds a book icon in the page menu to enable reader (distiller) mode manually.
+## Security
 
-### Export browser bookmarks
+Please report vulnerabilities privately as described in [SECURITY.md](SECURITY.md). Do not open a public issue for a security problem.
 
-Bookmarks can be exported in HTML format through the `Developer options` menu.
+## License
 
-### AD Blocker solution
-
-For blocking network requests, I recommend to use `AdAway` or any proxy AD Blocker such as `clash`.
-
-A content cosmetic blocker is embedded into ChromeXt with the help of eruda.
-To use it, first open the `Eruda console`.
-In the `Elements` panel, one can use the `pointer` icon to select elements on the page.
-After clicking the `delete` icon for a selected element, a corresponding filter will be saved to the `Resources` panel,
-where one can manage previous added filters.
-These filters are saved in the browser even after clearing the site's data.
-
-Another way to block ADs is using the [Content-Security-Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy/script-src) to block some scripts from loading.
-
-### User-Agent spoofing
-
-One can edit the User-Agent from the `Info` panel of `Eruda console`.
-A valid User-Agent should contain only ASCII characters.
-Currently, ChromeXt only changes the `User-Agent` HTTP header, which
-works well but is [deprecated](https://wicg.github.io/ua-client-hints/#user-agent).
-
-For Chromium based browsers, when the User-Agent spoofing is not taking effects, refresh the page using the reload button in the page menu.
-(By contrast, a swipe refresh might be insufficient.)
-
-Note that the DevTools can also change User-Agent.
-
-## Contribute to this project
-
-Before you submit your pull-requests, please ensure that the command
-`./gradlew build` or `gradlew.bat build` produces no warnings and no errors,
-and run `./gradlew format` to apply the project's [ktfmt](https://github.com/facebook/ktfmt) code style.
-
-Here are corresponding files you might want / need to change:
-1. Front end: [manager.vue](https://github.com/JingMatrix/jingmatrix.github.io/tree/main/components/ChromeXt/manager.vue)
-2. Tampermonkey API: [Local.kt](app/src/main/kotlin/org/matrix/chromext/script/Local.kt)
-and [GM.js](app/src/main/assets/GM.js)
-3. Eruda configuration: [eruda.js](app/src/main/assets/eruda.js)
-4. Support more WebView based browsers: [WebView.kt](app/src/main/kotlin/org/matrix/chromext/hook/WebView.kt)
-
-## Development plans
-
-- [x] Make it possible to pass intents to Chrome with `file` scheme
-- [x] Fix encoding problem for Chrome downloaded JavaScript files
-- [x] Inject module resource into Chrome
-- [x] Implement developer tools
-- [x] Use local versions of [eruda](https://github.com/liriliri/eruda)
-- [x] Improve eruda incorporation with Chrome
-- [x] Add more information in the preference screen
-- [x] Support more [Tampermonkey API](https://www.tampermonkey.net/documentation.php)s
-- [x] Find elegant way to support DevTools for Android 11-
-- [x] Add cosmetic AdBlocker using eruda
-- [x] Find way to get current interactive tab
-- [x] Remove AndroidX Room dependency to reduce app size
-- [x] Support non-split version of Android Chrome
-- [x] Solve the menu hook problem for non-split versions
-- [x] Handle multiple Tab Model
-- [x] Forward DevTools server socket
-- [x] A mobile friendly DevTools front end
-- [x] Allow user to trigger reader mode
-- [x] Support @resource API
-- [x] Make GestureNav Fix optional
-- [x] Add an open source License
-- [x] Support mocking User-Agent
-- [ ] ~~Support [urlFilter](https://developer.chrome.com/docs/extensions/reference/declarativeNetRequest/#type-RuleCondition) syntax~~
-- [x] Improve `Open in Chrome` function
-- [x] Implement fully `GM_info`
-- [x] Eruda fails due to [Injection Sinks](https://developer.mozilla.org/en-US/docs/Web/API/Trusted_Types_API)
-- [x] Hide page_info panel automatically
-- [x] Fix page menu injection position
-- [ ] ~~Use [Chrome DevTools Protocol](https://chromedevtools.github.io/devtools-protocol/) as UserScript engine~~
-- [ ] ~~Use `adb forward` to support non-root users~~
-- [x] Fully support WebView based browsers
-- [x] Fix [LSPatch for isolated process](https://github.com/LSPosed/LSPatch/issues/190) issue
-- [x] Implement UserScript storage
-- [x] Re-implement GM_xmlhttpRequest
-- [x] Convert exported bookmarks to HTML format
-- [x] Show executed scripts on current page
-- [x] Make a YouTube presentation video
-- [x] Implement GM_cookie
-- [x] Improve valid UserScripts Url detection
-- [ ] Save and present script errors and `GM_log` logs
-- [ ] Use `iframe` and local server to run general [WebExtensions](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions)
-- [ ] Bypass `style-src` rule for `eruda`, such as Mastodon
-- [ ] Support importing UserScripts from Tampermonkey exports
-- [ ] Support backup and restore
-- [ ] Add recommended UserScripts to the front end manager
-- [x] Add [chrome devtools front-end](https://chromium.googlesource.com/devtools/devtools-frontend/), see [devtools_http_handler.cc](https://source.chromium.org/chromium/chromium/src/+/main:content/browser/devtools/devtools_http_handler.cc) as reference.
-- [x] Hide inserted menu for non-page
+ChromeXt is distributed under the terms in [LICENSE](LICENSE).
