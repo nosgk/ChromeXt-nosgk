@@ -113,6 +113,9 @@ fun SettingsScreen(
   var storageDatabases by remember { mutableStateOf<List<LocalScriptDatabase>>(emptyList()) }
   var scanningStorage by remember { mutableStateOf(false) }
   var importingPackage by remember { mutableStateOf<String?>(null) }
+  var scanError by remember { mutableStateOf<String?>(null) }
+  var showManualImport by remember { mutableStateOf(false) }
+  var manualPath by remember { mutableStateOf("") }
 
   fun loadTelemetry() {
     scope.launch {
@@ -166,11 +169,19 @@ fun SettingsScreen(
     }
   }
 
+  fun applyScan(outcome: ScanOutcome) {
+    storageDatabases = outcome.databases
+    scanError =
+        if (outcome.rootOk) null
+        else
+            outcome.message.ifBlank { context.getString(R.string.settings_storage_no_root) }
+  }
+
   fun scanStorage() {
     if (scanningStorage) return
     scanningStorage = true
     scope.launch {
-      storageDatabases = withContext(Dispatchers.IO) { ScriptStorage.scan(storageDatabases) }
+      applyScan(withContext(Dispatchers.IO) { ScriptStorage.scan(storageDatabases) })
       scanningStorage = false
     }
   }
@@ -205,7 +216,7 @@ fun SettingsScreen(
       // Nothing has been probed yet; scan once and continue.
       scanningStorage = true
       scope.launch {
-        storageDatabases = withContext(Dispatchers.IO) { ScriptStorage.scan(storageDatabases) }
+        applyScan(withContext(Dispatchers.IO) { ScriptStorage.scan(storageDatabases) })
         scanningStorage = false
         importAll()
       }
@@ -301,9 +312,14 @@ fun SettingsScreen(
             databases = storageDatabases,
             scanning = scanningStorage,
             importingPackage = importingPackage,
+            scanError = scanError,
             onScan = { scanStorage() },
             onImport = { importDatabase(it) },
             onImportAll = { importAll() },
+            onManual = {
+              manualPath = ""
+              showManualImport = true
+            },
         )
       }
       item(key = "appearance") {
@@ -347,6 +363,52 @@ fun SettingsScreen(
         )
       }
     }
+  }
+
+  if (showManualImport) {
+    AlertDialog(
+        onDismissRequest = { showManualImport = false },
+        title = { Text(stringResource(R.string.settings_storage_manual_title)) },
+        text = {
+          Column {
+            Text(
+                stringResource(R.string.settings_storage_manual_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = manualPath,
+                onValueChange = { manualPath = it },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                singleLine = true,
+                placeholder = { Text(stringResource(R.string.settings_storage_manual_path)) },
+            )
+          }
+        },
+        confirmButton = {
+          TextButton(
+              enabled = manualPath.isNotBlank() && importingPackage == null,
+              onClick = {
+                val database =
+                    LocalScriptDatabase(
+                        packageName = "manual",
+                        label = context.getString(R.string.settings_storage_manual_label),
+                        path = manualPath.trim(),
+                        checked = true,
+                        exists = true,
+                    )
+                showManualImport = false
+                importDatabase(database)
+              }) {
+                Text(stringResource(R.string.settings_storage_import))
+              }
+        },
+        dismissButton = {
+          TextButton(onClick = { showManualImport = false }) {
+            Text(stringResource(R.string.action_cancel))
+          }
+        },
+    )
   }
 
   if (confirmDeleteAll) {
@@ -930,9 +992,11 @@ private fun StorageCard(
     databases: List<LocalScriptDatabase>,
     scanning: Boolean,
     importingPackage: String?,
+    scanError: String?,
     onScan: () -> Unit,
     onImport: (LocalScriptDatabase) -> Unit,
     onImportAll: () -> Unit,
+    onManual: () -> Unit,
 ) {
   Card(modifier = Modifier.fillMaxWidth()) {
     Column(modifier = Modifier.padding(14.dp)) {
@@ -978,6 +1042,16 @@ private fun StorageCard(
         ) {
           Text(stringResource(R.string.settings_storage_import_all))
         }
+        TextButton(onClick = onManual) {
+          Text(stringResource(R.string.settings_storage_manual))
+        }
+      }
+      scanError?.let {
+        Text(
+            it,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.error,
+        )
       }
       if (databases.isEmpty()) {
         Text(
@@ -1045,6 +1119,16 @@ private fun StorageCard(
           color = MaterialTheme.colorScheme.onSurfaceVariant,
           modifier = Modifier.padding(top = 6.dp),
       )
+      if (databases.isNotEmpty() &&
+          databases.all { it.checked } &&
+          databases.none { it.exists }) {
+        Text(
+            stringResource(R.string.settings_storage_not_found_hint),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+      }
     }
   }
 }

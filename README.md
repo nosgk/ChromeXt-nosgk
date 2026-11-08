@@ -202,6 +202,7 @@ node --test tools/js-tests/*.test.js
 
 - 修复 Vector 2.x 下读不到 LSPosed 作用域的问题：Vector 的库结构是 `scope(module_pkg_name, app_pkg_name, user_id)`、`modules(module_pkg_name, apk_path)`，没有 `mid` 列，旧的 JOIN 查询会直接报错。现在按 `PRAGMA table_info` 自动识别两代结构，并优先使用实时配置而不是 `config_backup`。
 - 注入引擎新增三个开关：全局脚本注入、自动挂载 Eruda、安装前确认；WebView 调试开关现在在所有调用点都生效。
+- 浏览器本地数据库扫描改为遍历所有用户目录并用 `find` 定位，区分「su 未授权」与「文件不存在」，并支持手动按完整路径导入。
 
 ## 3.13.0 更新内容
 

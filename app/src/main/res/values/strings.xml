@@ -274,5 +274,12 @@
 	<string name="settings_storage_import_failed">Import failed: %1$s</string>
 	<string name="settings_storage_none">No local database to import</string>
 	<string name="settings_storage_no_browser">No supported browser is installed</string>
+	<string name="settings_storage_no_root">Could not run su. Make sure ChromeXt is granted root access.</string>
+	<string name="settings_storage_not_found_hint">No local database was found. If the upstream ChromeXt did install scripts, open that browser once so it creates the database, or import it by path below.</string>
+	<string name="settings_storage_manual">Manual import</string>
+	<string name="settings_storage_manual_title">Import a database by path</string>
+	<string name="settings_storage_manual_hint">Enter the full path of a browser userscript database.</string>
+	<string name="settings_storage_manual_path">/data/user/0/&lt;pkg&gt;/databases/userscript</string>
+	<string name="settings_storage_manual_label">Manual database</string>
 	<string name="settings_storage_hint">Scripts installed by the upstream ChromeXt live in the userscript database of each browser. Import them here to see them in this fork.</string>
 </resources>

@@ -35,6 +35,13 @@ data class ImportOutcome(
  * browser process migrates itself on first run; this reader lets the manager do the same thing
  * immediately with root, and also shows the real paths on the device.
  */
+data class ScanOutcome(
+    val databases: List<LocalScriptDatabase>,
+    /** False when `su` is unavailable or the grant was denied. */
+    val rootOk: Boolean,
+    val message: String = "",
+)
+
 object ScriptStorage {
 
   private const val DB_NAME = "userscript"
@@ -49,48 +56,83 @@ object ScriptStorage {
         )
       }
 
-  /** Probes the real paths (including multi-user and device-encrypted data) with one `su` call. */
-  fun scan(databases: List<LocalScriptDatabase>): List<LocalScriptDatabase> {
-    if (databases.isEmpty()) return databases
+  /**
+   * Probes every user profile (`/data/user/<id>`, `/data/user_de/<id>`) plus `/data/data` in one
+   * `su` call. The previous version only checked user 0 and collapsed "su denied" into "not found",
+   * which made a working setup look broken.
+   */
+  fun scan(databases: List<LocalScriptDatabase>): ScanOutcome {
+    if (databases.isEmpty()) return ScanOutcome(databases, rootOk = true)
+    val packages = databases.joinToString(" ") { it.packageName }
     val command =
-        buildString {
-          append("for p in ")
-          databases.joinTo(this, " ") { it.packageName }
-          append("; do for base in /data/user/0 /data/user_de/0 /data/data; do ")
-          append("f=\$base/\$p/databases/$DB_NAME; ")
-          append("if [ -f \"\$f\" ]; then ")
-          append("s=\$(stat -c %s \"\$f\" 2>/dev/null || echo 0); ")
-          append("t=\$(stat -c %Y \"\$f\" 2>/dev/null || echo 0); ")
-          append("echo \"\$f|\$s|\$t\"; fi; done; done")
-        }
-    val output = runSu(command, 8) ?: return databases.map { it.copy(checked = true, exists = false) }
+        "users=\$(ls /data/user 2>/dev/null)\n" +
+            "for u in \$users; do\n" +
+            "  for p in $packages; do\n" +
+            "    for f in \$(find /data/user/\$u/\$p /data/user_de/\$u/\$p -maxdepth 3 \\( -name $DB_NAME -o -name $DB_NAME.db \\) 2>/dev/null); do\n" +
+            "      s=\$(stat -c %s \"\$f\" 2>/dev/null || echo 0)\n" +
+            "      t=\$(stat -c %Y \"\$f\" 2>/dev/null || echo 0)\n" +
+            "      echo \"\$f|\$s|\$t\"\n" +
+            "    done\n" +
+            "  done\n" +
+            "done\n" +
+            "for p in $packages; do\n" +
+            "  for f in \$(find /data/data/\$p -maxdepth 3 \\( -name $DB_NAME -o -name $DB_NAME.db \\) 2>/dev/null); do\n" +
+            "    s=\$(stat -c %s \"\$f\" 2>/dev/null || echo 0)\n" +
+            "    t=\$(stat -c %Y \"\$f\" 2>/dev/null || echo 0)\n" +
+            "    echo \"\$f|\$s|\$t\"\n" +
+            "  done\n" +
+            "done"
+
+    val output =
+        runSu(command, 12)
+            ?: return ScanOutcome(
+                databases.map { it.copy(checked = true, exists = false) },
+                rootOk = false,
+                message = "su unavailable",
+            )
+    if (output.contains("Permission denied", ignoreCase = true) ||
+        output.contains("not allowed", ignoreCase = true) ||
+        output.contains("uid=0", ignoreCase = true).not() && output.contains("su:", ignoreCase = true)) {
+      return ScanOutcome(
+          databases.map { it.copy(checked = true, exists = false) },
+          rootOk = false,
+          message = output.trim().take(200),
+      )
+    }
+
     val found = mutableMapOf<String, Triple<String, Long, Long>>()
     output.lineSequence().map { it.trim() }.filter { it.contains('|') }.forEach { line ->
       val parts = line.split('|')
       if (parts.size < 3) return@forEach
       val path = parts[0]
-      val segments = path.split('/')
-      val index = segments.indexOf("databases")
-      val packageName = segments.getOrNull(index - 1) ?: return@forEach
+      val packageName =
+          databases.firstOrNull { path.contains("/${it.packageName}/") }?.packageName
+              ?: return@forEach
       val size = parts[1].toLongOrNull() ?: 0L
       val modified = parts[2].toLongOrNull() ?: 0L
-      // Prefer the credential-encrypted path, but accept whatever exists for this package.
-      if (!found.containsKey(packageName)) {
-        found[packageName] = Triple(path, size, modified)
-      }
+      // Prefer the credential-encrypted user 0 path, but accept whatever exists.
+      val current = found[packageName]
+      val better =
+          current == null ||
+              (!current.first.contains("/data/user_de/") && path.contains("/data/user_de/")) ||
+              (!current.first.contains("/data/user/0/") && path.contains("/data/user/0/"))
+      if (better) found[packageName] = Triple(path, size, modified)
     }
-    return databases.map { database ->
-      val match = found[database.packageName]
-      if (match == null) database.copy(checked = true, exists = false)
-      else
-          database.copy(
-              path = match.first,
-              size = match.second,
-              lastModified = match.third,
-              checked = true,
-              exists = true,
-          )
-    }
+    return ScanOutcome(
+        databases.map { database ->
+          val match = found[database.packageName]
+          if (match == null) database.copy(checked = true, exists = false)
+          else
+              database.copy(
+                  path = match.first,
+                  size = match.second,
+                  lastModified = match.third,
+                  checked = true,
+                  exists = true,
+              )
+        },
+        rootOk = true,
+    )
   }
 
   /**

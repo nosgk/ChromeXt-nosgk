@@ -7,6 +7,7 @@ All notable changes to this fork are documented here. The format follows [Keep a
 ### Fixed
 
 - LSPosed scope reading on Vector 2.x. Its database uses `scope(module_pkg_name, app_pkg_name, user_id)` and `modules(module_pkg_name, apk_path)` with no `mid`, so the old JOIN failed with "no such column" and the apps page reported "cannot query … config_backup". The reader now inspects `PRAGMA table_info` and supports both the Vector and the old LSPosed schemas, prefers the live config over `config_backup`, and keeps the backup path as a fallback.
+- Browser local database scan: probe every user profile (`/data/user/<id>`, `/data/user_de/<id>`) with `find` instead of a fixed user-0 path, report "su denied" separately from "file not found", and offer a manual path import as a fallback.
 
 ### Added
 
