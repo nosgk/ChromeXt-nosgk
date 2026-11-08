@@ -1,8 +1,10 @@
 package org.matrix.chromext.proxy
 
+import android.content.ContentValues
 import android.content.Context
 import android.os.Build
 import android.os.Environment
+import android.provider.MediaStore
 import android.util.Pair
 import android.view.View
 import android.view.View.OnClickListener
@@ -88,6 +90,27 @@ object PreferenceProxy {
     }
   }
 
+  private fun writeBookmarks(ctx: Context, html: String) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      val values =
+          ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "Bookmarks.html")
+            put(MediaStore.MediaColumns.MIME_TYPE, "text/html")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+          }
+      val uri = ctx.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+      uri?.let {
+        ctx.contentResolver.openOutputStream(it)?.use { output -> output.write(html.toByteArray()) }
+      }
+    } else {
+      File(
+              Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
+              "Bookmarks.html",
+          )
+          .writeText(html)
+    }
+  }
+
   fun setClickListener(preferences: Map<String, Any>) {
     val ctx = Chrome.getContext()
     val sharedPref = ctx.getSharedPreferences("ChromeXt", Context.MODE_PRIVATE)
@@ -147,12 +170,7 @@ object PreferenceProxy {
                       }
 
                       html += "</DL><p>"
-                      File(
-                              Environment.getExternalStoragePublicDirectory(
-                                  Environment.DIRECTORY_DOWNLOADS),
-                              "Bookmarks.html",
-                          )
-                          .writeText(html)
+                      writeBookmarks(ctx, html)
                       Log.toast(
                           ctx,
                           "Bookmarks exported to " +

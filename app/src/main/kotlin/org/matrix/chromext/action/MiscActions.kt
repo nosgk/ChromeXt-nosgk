@@ -11,7 +11,10 @@ object MiscActions : ActionGroup {
           "block" to
               ActionHandler { context ->
                 val url = Chrome.getUrl(context.tab)
-                if (isUserScript(url)) invalidUserScriptUrls.add(url!!)
+                if (isUserScript(url)) {
+                  if (invalidUserScriptUrls.size > 256) invalidUserScriptUrls.removeAt(0)
+                  invalidUserScriptUrls.add(url!!)
+                }
                 "if (Symbol.ChromeXt) Symbol.ChromeXt.lock(${Local.key},'${Local.name}');"
               },
       )

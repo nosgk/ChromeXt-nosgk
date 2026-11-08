@@ -165,7 +165,9 @@ object Chrome {
         getTab()?.invokeMethod { name == "getContext" || returnType == Context::class.java }
             as Context?
     if (activity != null && mContext == null) init(activity, activity.packageName)
-    return activity ?: mContext!!.get()!!
+    return activity
+        ?: mContext?.get()
+        ?: throw IllegalStateException("ChromeXt context is not initialized")
   }
 
   fun checkTab(tab: Any?): Boolean {
@@ -361,7 +363,13 @@ object Chrome {
       }
     }
     if (!flagFound) labs.put(newFlag)
-    localState.outputStream().write(config.toString().toByteArray())
+    // Write through a temporary file so a killed process cannot leave a truncated Local State.
+    val tmp = File(localState.parentFile, localState.name + ".tmp")
+    tmp.writeText(config.toString())
+    if (!tmp.renameTo(localState)) {
+      localState.writeText(config.toString())
+      tmp.delete()
+    }
     return true
   }
 }
