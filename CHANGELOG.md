@@ -8,7 +8,7 @@ All notable changes to this fork are documented here. The format follows [Keep a
 
 - Full-screen code editor: the script editor now shows metadata plus a line/character summary and an "open code editor" button; the editor itself provides monospace input, find/replace, a live line/column indicator and a discard confirmation.
 - The app selector in the script editor has a search field and only lists apps that are actually in the LSPosed scope (falling back to apps that reported in when the scope cannot be read).
-- Installing a script from a hooked app scopes it to that app by default, both in the native install screen and in the direct-install fallback.
+- Installing a script from a hooked app scopes it to that app by default, both in the native install screen and in the direct-install fallback; re-installing adds the current app to a non-global scope and leaves a global script global.
 - The LSPosed scope reader now discovers `modules_config.db` under `/data/adb`, copies the `-wal`/`-shm` sidecars, retries two query shapes, and reports `NO_ROOT` / `NO_CONFIG` / `DB_ERROR` / `EMPTY` instead of silently returning an empty scope.
 
 ### Changed

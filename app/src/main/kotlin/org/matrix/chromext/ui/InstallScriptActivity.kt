@@ -102,11 +102,18 @@ private fun InstallScriptScreen(
   var script by remember { mutableStateOf<Script?>(null) }
   var existingVersion by remember { mutableStateOf<String?>(null) }
   var existingApps by remember { mutableStateOf<List<String>>(emptyList()) }
+  var existingFound by remember { mutableStateOf(false) }
   var error by remember { mutableStateOf<Int?>(null) }
 
-  // Installing from a hooked app scopes the script to that app; re-installing keeps the scope the
-  // user already chose.
-  val scopedApps = existingApps.ifEmpty { listOfNotNull(sourcePackage?.takeIf { it.isNotBlank() }) }
+  // A fresh install from a hooked app is scoped to that app. Re-installing keeps the chosen scope
+  // and adds the current app; a script that was global stays global.
+  val scopedApps =
+      when {
+        !existingFound -> listOfNotNull(sourcePackage?.takeIf { it.isNotBlank() })
+        existingApps.isEmpty() -> emptyList()
+        sourcePackage != null && sourcePackage !in existingApps -> existingApps + sourcePackage
+        else -> existingApps
+      }
 
   LaunchedEffect(uri, provided) {
     if (text == null && uri != null) {
@@ -122,6 +129,7 @@ private fun InstallScriptScreen(
     } else {
       script = parsed
       val existing = withContext(Dispatchers.IO) { repository.load().find { it.id == parsed.id } }
+      existingFound = existing != null
       existingVersion = existing?.version
       existingApps = existing?.apps ?: emptyList()
     }

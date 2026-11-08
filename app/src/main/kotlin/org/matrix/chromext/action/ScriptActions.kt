@@ -26,12 +26,22 @@ object ScriptActions : ActionGroup {
                   // when the module Activity cannot be started (for example, a restricted ROM).
                   if (!ManagerLauncher.installScript(Chrome.getContext(), context.payload)) {
                     val existing = ScriptDbManager.scripts.find { it.id == script.id }
+                    val currentPackage = Chrome.packageName
                     val toInsert =
                         if (existing == null) {
                           // Installed from this app: scope it here instead of enabling it globally.
-                          script.copy(apps = listOfNotNull(Chrome.packageName))
+                          script.copy(apps = listOfNotNull(currentPackage))
                         } else {
-                          // Re-installing keeps the user's enable state, ordering and overrides.
+                          // Re-installing keeps the user's enable state, ordering and overrides, and
+                          // adds the app it was installed from to a non-global scope.
+                          val apps =
+                              if (existing.apps.isNotEmpty() &&
+                                  currentPackage != null &&
+                                  currentPackage !in existing.apps) {
+                                existing.apps + currentPackage
+                              } else {
+                                existing.apps
+                              }
                           script.copy(
                               enabled = existing.enabled,
                               sortOrder = existing.sortOrder,
@@ -39,7 +49,7 @@ object ScriptActions : ActionGroup {
                               customInclude = existing.customInclude,
                               customExclude = existing.customExclude,
                               customRunAt = existing.customRunAt,
-                              apps = existing.apps,
+                              apps = apps,
                               lib = existing.lib,
                           )
                         }
