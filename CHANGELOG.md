@@ -16,6 +16,8 @@ All notable changes to this fork are documented here. The format follows [Keep a
 - `@run-at` and match/exclude overrides are applied at injection time.
 - Native script manager (Jetpack Compose): installed list, search/filter/sort, enable/disable, code editor, per-script overrides, `GM_storage`, install confirmation and ZIP backup/restore.
 - Browser page menus and Chrome's Developer options now open the native manager instead of the hosted front end.
+- JVM unit tests for UserScript parsing, URL matching, R8 name ranking, menu policy and override rules, plus a Robolectric v9 -> v10 migration test.
+- Node contract tests for the injected assets, including the IPC anchor and GM API coverage.
 
 ### Changed
 
