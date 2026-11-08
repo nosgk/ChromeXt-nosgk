@@ -59,7 +59,13 @@ echo "Application id: $APP_ID"
 echo "Version name: $VERSION_NAME"
 
 if unzip -l "$APK" | grep -q ' lib/'; then
-  echo "warning: APK contains native libraries; the arm64-v8a name is only a label" >&2
+  OTHER_ABIS="$(unzip -l "$APK" | grep -o 'lib/[^/]*/' | sort -u | grep -v '^lib/arm64-v8a/$' || true)"
+  if [[ -n "$OTHER_ABIS" ]]; then
+    echo "error: APK contains native libraries for other ABIs:" >&2
+    echo "$OTHER_ABIS" >&2
+    exit 1
+  fi
+  echo "Native libraries: arm64-v8a only."
 else
   echo "No native libraries; the APK is architecture-independent."
 fi

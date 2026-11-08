@@ -18,12 +18,12 @@ Chromium-based browsers such as Chrome, Brave, Vivaldi, Whale, Bromite, Cromite,
 
 ## Requirements
 
-- Android 5.0+ (API 21+), arm64-v8a device recommended.
+- Android 5.0+ (API 21+), **arm64-v8a** device.
 - Xposed framework:
   - Root users: [Vector](https://github.com/JingMatrix/Vector) or LSPosed.
   - Non-root users: a patched [LSPatch](https://github.com/JingMatrix/LSPatch) build.
 
-The module APK contains no native libraries, so it is architecture-independent. Release artifacts are published as `ChromeXt-arm64-v8a.apk` to match the recommended device class.
+The module code is architecture-independent. The release APK contains only the arm64-v8a slice of the Compose graphics-path native library, which is why artifacts are named `ChromeXt-arm64-v8a.apk`.
 
 ## Install
 

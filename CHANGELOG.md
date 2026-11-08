@@ -22,7 +22,7 @@ All notable changes to this fork are documented here. The format follows [Keep a
 
 ### Changed
 
-- The APK now includes AndroidX Compose. Release size is budgeted at 8 MiB; the module has no native libraries and remains architecture-independent.
+- The APK now includes AndroidX Compose. Release size is budgeted at 8 MiB, and native libraries are filtered to arm64-v8a to match the artifact name.
 
 ### Changed
 

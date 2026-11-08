@@ -13,6 +13,10 @@ android {
     targetSdk = 35
     versionCode = 18
     versionName = "3.9.1"
+
+    // Compose ships a graphics-path native library. Publish the arm64-v8a slice only, which is
+    // what the release artifact name promises.
+    ndk { abiFilters += "arm64-v8a" }
   }
 
   buildFeatures {
