@@ -25,6 +25,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -535,10 +537,10 @@ private fun BrowsersCard(
             )
             IconButton(onClick = { onRestart(browser.packageName) }) {
               Icon(
-                  androidx.compose.material.icons.Icons.Default.Refresh,
+                  Icons.Default.Refresh,
                   contentDescription = stringResource(R.string.settings_browser_restart),
                   tint = MaterialTheme.colorScheme.primary,
-                )
+              )
             }
           } else {
             Text(
