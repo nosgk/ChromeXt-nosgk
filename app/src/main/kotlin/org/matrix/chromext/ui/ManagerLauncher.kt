@@ -13,4 +13,17 @@ object ManagerLauncher {
     if (context !is Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(intent) }
   }
+
+  /** Returns false when the manager Activity cannot be started, so the caller can fall back. */
+  fun installScript(context: Context, script: String): Boolean =
+      runCatching {
+            val intent =
+                Intent(context, InstallScriptActivity::class.java).apply {
+                  putExtra(InstallScriptActivity.EXTRA_SCRIPT, script)
+                  addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            context.startActivity(intent)
+            true
+          }
+          .getOrDefault(false)
 }

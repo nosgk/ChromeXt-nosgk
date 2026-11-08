@@ -97,7 +97,11 @@ object ScriptDbManager {
         records.mapNotNull { record ->
           val existing = scripts.find { it.id == record.id }
           val parsed =
-              parseScript(record.meta + record.code, record.storage, hydrateRequires = false)
+              parseScript(
+                  record.meta + record.code,
+                  record.storage,
+                  hydrateRequires = existing == null,
+              )
           if (parsed == null || parsed.id != record.id) {
             null
           } else {

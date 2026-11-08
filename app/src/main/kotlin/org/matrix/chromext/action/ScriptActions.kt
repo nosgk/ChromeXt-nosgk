@@ -6,6 +6,7 @@ import org.matrix.chromext.Chrome
 import org.matrix.chromext.script.Local
 import org.matrix.chromext.script.ScriptDbManager
 import org.matrix.chromext.script.parseScript
+import org.matrix.chromext.ui.ManagerLauncher
 import org.matrix.chromext.utils.Log
 import org.matrix.chromext.utils.matching
 import org.matrix.chromext.utils.parseOrigin
@@ -16,28 +17,32 @@ object ScriptActions : ActionGroup {
           "installScript" to
               ActionHandler { context ->
                 var callback: String? = null
-                val script = parseScript(context.payload)
+                val script = parseScript(context.payload, hydrateRequires = false)
                 if (script == null) {
                   callback = "alert('Invalid UserScript');"
                 } else {
                   Log.i("Install script ${script.id}")
-                  val existing = ScriptDbManager.scripts.find { it.id == script.id }
-                  val toInsert =
-                      if (existing == null) {
-                        script
-                      } else {
-                        // Re-installing keeps the user's enable state, ordering and overrides.
-                        script.copy(
-                            enabled = existing.enabled,
-                            sortOrder = existing.sortOrder,
-                            customMatch = existing.customMatch,
-                            customInclude = existing.customInclude,
-                            customExclude = existing.customExclude,
-                            customRunAt = existing.customRunAt,
-                            lib = existing.lib,
-                        )
-                      }
-                  ScriptDbManager.insert(toInsert)
+                  // Prefer the native confirmation screen; fall back to the old direct install
+                  // when the module Activity cannot be started (for example, a restricted ROM).
+                  if (!ManagerLauncher.installScript(Chrome.getContext(), context.payload)) {
+                    val existing = ScriptDbManager.scripts.find { it.id == script.id }
+                    val toInsert =
+                        if (existing == null) {
+                          script
+                        } else {
+                          // Re-installing keeps the user's enable state, ordering and overrides.
+                          script.copy(
+                              enabled = existing.enabled,
+                              sortOrder = existing.sortOrder,
+                              customMatch = existing.customMatch,
+                              customInclude = existing.customInclude,
+                              customExclude = existing.customExclude,
+                              customRunAt = existing.customRunAt,
+                              lib = existing.lib,
+                          )
+                        }
+                    ScriptDbManager.insert(toInsert)
+                  }
                 }
                 callback
               },
