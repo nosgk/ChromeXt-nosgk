@@ -93,8 +93,19 @@ def check_version() -> None:
 
 
 def check_package_lists() -> None:
-    main = read(ROOT / "app" / "src" / "main" / "kotlin" / "org" / "matrix" / "chromext" / "MainHook.kt")
-    block = main.split("supportedPackages", 1)[1].split(")", 1)[0]
+    catalog = read(
+        ROOT
+        / "app"
+        / "src"
+        / "main"
+        / "kotlin"
+        / "org"
+        / "matrix"
+        / "chromext"
+        / "browser"
+        / "BrowserCatalog.kt"
+    )
+    block = catalog.split("val supportedPackages", 1)[1].split(")", 1)[0]
     supported = set(re.findall(r'"([a-z0-9_.]+)"', block))
     arrays_path = ROOT / "app" / "src" / "main" / "res" / "values" / "arrays.xml"
     arrays = set(re.findall(r"<item>([^<]+)</item>", read(arrays_path)))

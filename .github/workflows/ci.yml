@@ -57,6 +57,9 @@ jobs:
       - name: Documentation checks
         run: python3 tools/docs/check_docs.py
 
+      - name: Generated browser catalog is current
+        run: python3 tools/gen/browsers.py --check
+
       - name: Upload validation reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

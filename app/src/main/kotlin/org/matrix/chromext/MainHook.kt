@@ -8,6 +8,7 @@ import android.webkit.WebViewClient
 import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.IXposedHookZygoteInit
 import de.robv.android.xposed.callbacks.XC_LoadPackage
+import org.matrix.chromext.browser.BrowserCatalog
 import org.matrix.chromext.hook.BaseHook
 import org.matrix.chromext.hook.ContextMenuHook
 import org.matrix.chromext.hook.PageInfoHook
@@ -19,39 +20,11 @@ import org.matrix.chromext.utils.Log
 import org.matrix.chromext.utils.findMethodOrNull
 import org.matrix.chromext.utils.hookAfter
 
-val supportedPackages =
-    arrayOf(
-        "app.vanadium.browser",
-        "com.android.chrome",
-        "com.brave.browser",
-        "com.brave.browser_beta",
-        "com.brave.browser_nightly",
-        "com.chrome.beta",
-        "com.chrome.canary",
-        "com.chrome.dev",
-        "com.coccoc.trinhduyet",
-        "com.coccoc.trinhduyet_beta",
-        "com.herond.android.browser",
-        "com.kiwibrowser.browser",
-        "com.naver.whale",
-        "com.vivaldi.browser",
-        "com.vivaldi.browser.snapshot",
-        "io.github.jqssun.helium",
-        "org.axpos.aosmium",
-        "org.bromite.bromite",
-        "org.chromium.chrome",
-        "org.chromium.thorium",
-        "org.cromite.cromite",
-        "org.greatfire.freebrowser",
-        "org.triple.banana",
-        "us.spotco.mulch",
-    )
-
 class MainHook : IXposedHookLoadPackage, IXposedHookZygoteInit {
   override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
     Log.d(lpparam.processName + " started")
     if (lpparam.packageName == "org.matrix.chromext") return
-    if (supportedPackages.contains(lpparam.packageName)) {
+    if (BrowserCatalog.supportedPackages.contains(lpparam.packageName)) {
       // Every constructor taking a Context, rather than a fixed index into an order the JLS leaves
       // unspecified: browsers do not agree on how many constructors WindowAndroid has, and Whale in
       // particular has no one-argument overload, so index 1 there is a test-only constructor the

@@ -5,6 +5,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import org.matrix.chromext.browser.BrowserCatalog
 import org.matrix.chromext.utils.Log
 
 const val TAG = "ChromeXt"
@@ -24,13 +25,14 @@ class OpenInChrome : Activity() {
     super.onCreate(savedInstanceState)
 
     @Suppress("DEPRECATION") val installedApplications = packageManager.getInstalledApplications(0)
-    val avaiblePackages = supportedPackages.intersect(installedApplications.map { it.packageName })
-    if (avaiblePackages.size == 0) {
+    val availablePackages =
+        BrowserCatalog.supportedPackages.intersect(installedApplications.map { it.packageName })
+    if (availablePackages.size == 0) {
       Log.toast(this, "No supported Chrome installed")
       finish()
       return
     } else {
-      defaultPackage = avaiblePackages.last()
+      defaultPackage = availablePackages.last()
     }
 
     val intent: Intent = getIntent()
