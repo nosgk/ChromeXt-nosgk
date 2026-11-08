@@ -24,7 +24,11 @@ object ScriptActions : ActionGroup {
                   Log.i("Install script ${script.id}")
                   // Prefer the native confirmation screen; fall back to the old direct install
                   // when the module Activity cannot be started (for example, a restricted ROM).
-                  if (!ManagerLauncher.installScript(Chrome.getContext(), context.payload)) {
+                  // The engine switch can also skip the confirmation on purpose.
+                  val confirmed =
+                      ScriptDbManager.engine.installConfirm &&
+                          ManagerLauncher.installScript(Chrome.getContext(), context.payload)
+                  if (!confirmed) {
                     val existing = ScriptDbManager.scripts.find { it.id == script.id }
                     val currentPackage = Chrome.packageName
                     val toInsert =

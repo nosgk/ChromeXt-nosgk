@@ -2,6 +2,23 @@
 
 All notable changes to this fork are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the module's `versionName`.
 
+## [3.14.0] - 2026-11-08
+
+### Fixed
+
+- LSPosed scope reading on Vector 2.x. Its database uses `scope(module_pkg_name, app_pkg_name, user_id)` and `modules(module_pkg_name, apk_path)` with no `mid`, so the old JOIN failed with "no such column" and the apps page reported "cannot query … config_backup". The reader now inspects `PRAGMA table_info` and supports both the Vector and the old LSPosed schemas, prefers the live config over `config_backup`, and keeps the backup path as a fallback.
+
+### Added
+
+- Engine switch "global script injection": turns userscript injection off entirely while keeping the ChromeXt menus.
+- Engine switch "auto-mount Eruda": opens the Eruda console after a page loads (off by default).
+- Engine switch "confirm before installing": skips the install confirmation screen when disabled.
+- The WebView debugging switch is now honored by every call site (Eruda install and inspect actions), not only the initial hook.
+
+### Changed
+
+- All engine switches are stored in the central `config` table and re-read by browsers on the next sync; the settings card explains this.
+
 ## [3.13.0] - 2026-11-08
 
 ### Added
@@ -137,7 +154,8 @@ All notable changes to this fork are documented here. The format follows [Keep a
 - Support for the MVC page menu design.
 - Loading-state tracking for browsers where `mIsLoading` cannot be located.
 
-[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.13.0...HEAD
+[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.14.0...HEAD
+[3.14.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.14.0
 [3.13.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.13.0
 [3.12.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.12.0
 [3.11.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.11.0

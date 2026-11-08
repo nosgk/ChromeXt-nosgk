@@ -224,6 +224,8 @@
 	<string name="settings_browser_restart">Restart</string>
 	<string name="settings_browser_not_installed">not installed</string>
 	<string name="settings_engine">Injection engine</string>
+	<string name="settings_engine_injection">Global script injection</string>
+	<string name="settings_engine_injection_hint">When off, no userscript is injected; only the ChromeXt menus stay available</string>
 	<string name="settings_engine_keep_storage">Persist GM storage</string>
 	<string name="settings_engine_keep_storage_hint">Keep GM_setValue data when a script is updated or reinstalled</string>
 	<string name="settings_engine_csp">CSP rule injection</string>
@@ -232,8 +234,12 @@
 	<string name="settings_engine_webview_hint">Call setWebContentsDebuggingEnabled(true) on hooked WebView apps for ADB inspection</string>
 	<string name="settings_engine_eruda">Inject Eruda console</string>
 	<string name="settings_engine_eruda_hint">Show the Eruda entry in page menus and use the browser-local cache</string>
+	<string name="settings_engine_eruda_auto">Auto-mount Eruda</string>
+	<string name="settings_engine_eruda_auto_hint">Open the Eruda console automatically after a page loads; heavy, off by default</string>
 	<string name="settings_engine_privileged">Allow privileged dispatch</string>
 	<string name="settings_engine_privileged_hint">Let scripts declaring @grant GM.ChromeXt call ChromeXt.dispatch</string>
+	<string name="settings_engine_install_confirm">Confirm before installing</string>
+	<string name="settings_engine_install_confirm_hint">Show the confirmation screen when installing from a page; off installs directly</string>
 	<string name="settings_engine_pending">Changes apply when the browser next syncs</string>
 	<string name="settings_data">Data and backup</string>
 	<string name="settings_export_short">Export (.zip)</string>

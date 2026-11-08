@@ -12,7 +12,10 @@ data class EngineConfig(
     val cspRules: Boolean = true,
     val webViewDebug: Boolean = true,
     val erudaEnabled: Boolean = true,
+    val erudaAuto: Boolean = false,
     val allowPrivileged: Boolean = true,
+    val injectionEnabled: Boolean = true,
+    val installConfirm: Boolean = true,
 ) {
   fun toMap(): Map<String, String> =
       mapOf(
@@ -20,7 +23,10 @@ data class EngineConfig(
           KEY_CSP_RULES to cspRules.toString(),
           KEY_WEBVIEW_DEBUG to webViewDebug.toString(),
           KEY_ERUDA to erudaEnabled.toString(),
+          KEY_ERUDA_AUTO to erudaAuto.toString(),
           KEY_ALLOW_PRIVILEGED to allowPrivileged.toString(),
+          KEY_INJECTION to injectionEnabled.toString(),
+          KEY_INSTALL_CONFIRM to installConfirm.toString(),
       )
 
   companion object {
@@ -28,7 +34,10 @@ data class EngineConfig(
     const val KEY_CSP_RULES = "csp_rules"
     const val KEY_WEBVIEW_DEBUG = "webview_debug"
     const val KEY_ERUDA = "eruda_enabled"
+    const val KEY_ERUDA_AUTO = "eruda_auto"
     const val KEY_ALLOW_PRIVILEGED = "allow_privileged"
+    const val KEY_INJECTION = "injection_enabled"
+    const val KEY_INSTALL_CONFIRM = "install_confirm"
 
     fun from(values: Map<String, String>): EngineConfig =
         EngineConfig(
@@ -36,7 +45,10 @@ data class EngineConfig(
             cspRules = values[KEY_CSP_RULES].toBooleanOrDefault(true),
             webViewDebug = values[KEY_WEBVIEW_DEBUG].toBooleanOrDefault(true),
             erudaEnabled = values[KEY_ERUDA].toBooleanOrDefault(true),
+            erudaAuto = values[KEY_ERUDA_AUTO].toBooleanOrDefault(false),
             allowPrivileged = values[KEY_ALLOW_PRIVILEGED].toBooleanOrDefault(true),
+            injectionEnabled = values[KEY_INJECTION].toBooleanOrDefault(true),
+            installConfirm = values[KEY_INSTALL_CONFIRM].toBooleanOrDefault(true),
         )
 
     private fun String?.toBooleanOrDefault(default: Boolean): Boolean =

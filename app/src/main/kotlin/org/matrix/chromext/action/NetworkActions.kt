@@ -60,7 +60,9 @@ object NetworkActions : ActionGroup {
               },
           "cookie" to
               ActionHandler { context ->
-                if (WebViewHook.isInit) WebView.setWebContentsDebuggingEnabled(true)
+                if (WebViewHook.isInit && ScriptDbManager.engine.webViewDebug) {
+                  WebView.setWebContentsDebuggingEnabled(true)
+                }
                 val detail = JSONObject(context.payload)
                 val method = detail.getString("method")
                 val params = detail.optJSONObject("params")

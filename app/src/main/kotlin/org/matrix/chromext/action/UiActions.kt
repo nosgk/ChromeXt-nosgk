@@ -25,6 +25,7 @@ import org.matrix.chromext.hook.UserScriptHook
 import org.matrix.chromext.hook.WebViewHook
 import org.matrix.chromext.proxy.UserScriptProxy
 import org.matrix.chromext.script.Local
+import org.matrix.chromext.script.ScriptDbManager
 import org.matrix.chromext.utils.ERUD_URL
 import org.matrix.chromext.utils.Log
 
@@ -153,7 +154,9 @@ object UiActions : ActionGroup {
               },
           "inspectPages" to
               ActionHandler { context ->
-                if (WebViewHook.isInit) WebView.setWebContentsDebuggingEnabled(true)
+                if (WebViewHook.isInit && ScriptDbManager.engine.webViewDebug) {
+                  WebView.setWebContentsDebuggingEnabled(true)
+                }
                 Chrome.IO.submit {
                   val code = "ChromeXt.post('inspect_pages', ${getInspectPages()});"
                   Handler(Chrome.getContext().mainLooper).post {

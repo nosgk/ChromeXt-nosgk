@@ -647,6 +647,12 @@ private fun EngineCard(engine: EngineConfig, onChange: (EngineConfig) -> Unit) {
           style = MaterialTheme.typography.titleMedium,
       )
       EngineSwitch(
+          title = stringResource(R.string.settings_engine_injection),
+          hint = stringResource(R.string.settings_engine_injection_hint),
+          checked = engine.injectionEnabled,
+          onCheckedChange = { onChange(engine.copy(injectionEnabled = it)) },
+      )
+      EngineSwitch(
           title = stringResource(R.string.settings_engine_keep_storage),
           hint = stringResource(R.string.settings_engine_keep_storage_hint),
           checked = engine.keepStorage,
@@ -671,10 +677,22 @@ private fun EngineCard(engine: EngineConfig, onChange: (EngineConfig) -> Unit) {
           onCheckedChange = { onChange(engine.copy(erudaEnabled = it)) },
       )
       EngineSwitch(
+          title = stringResource(R.string.settings_engine_eruda_auto),
+          hint = stringResource(R.string.settings_engine_eruda_auto_hint),
+          checked = engine.erudaAuto,
+          onCheckedChange = { onChange(engine.copy(erudaAuto = it)) },
+      )
+      EngineSwitch(
           title = stringResource(R.string.settings_engine_privileged),
           hint = stringResource(R.string.settings_engine_privileged_hint),
           checked = engine.allowPrivileged,
           onCheckedChange = { onChange(engine.copy(allowPrivileged = it)) },
+      )
+      EngineSwitch(
+          title = stringResource(R.string.settings_engine_install_confirm),
+          hint = stringResource(R.string.settings_engine_install_confirm_hint),
+          checked = engine.installConfirm,
+          onCheckedChange = { onChange(engine.copy(installConfirm = it)) },
       )
       Text(
           stringResource(R.string.settings_engine_pending),

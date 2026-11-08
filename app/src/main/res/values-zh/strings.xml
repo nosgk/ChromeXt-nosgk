@@ -224,6 +224,8 @@
 	<string name="settings_browser_restart">重启</string>
 	<string name="settings_browser_not_installed">未安装</string>
 	<string name="settings_engine">注入引擎</string>
+	<string name="settings_engine_injection">全局脚本注入</string>
+	<string name="settings_engine_injection_hint">关闭后不再向页面注入任何用户脚本，仅保留 ChromeXt 菜单</string>
 	<string name="settings_engine_keep_storage">持久化 GM 存储</string>
 	<string name="settings_engine_keep_storage_hint">更新或重装脚本时保留 GM_setValue 数据</string>
 	<string name="settings_engine_csp">CSP 规则注入</string>
@@ -232,8 +234,12 @@
 	<string name="settings_engine_webview_hint">对已 Hook 的 WebView 强制 setWebContentsDebuggingEnabled(true)，便于 ADB 调试</string>
 	<string name="settings_engine_eruda">注入 Eruda 控制台</string>
 	<string name="settings_engine_eruda_hint">在页面菜单中显示 Eruda 入口，并使用浏览器本地缓存</string>
+	<string name="settings_engine_eruda_auto">自动挂载 Eruda</string>
+	<string name="settings_engine_eruda_auto_hint">页面加载完成后自动打开 Eruda 控制台；体积较大，默认关闭</string>
 	<string name="settings_engine_privileged">开放底层 Dispatch 接口</string>
 	<string name="settings_engine_privileged_hint">允许声明 @grant GM.ChromeXt 的脚本调用 ChromeXt.dispatch</string>
+	<string name="settings_engine_install_confirm">安装前确认</string>
+	<string name="settings_engine_install_confirm_hint">从网页安装脚本时先显示确认页；关闭后直接安装</string>
 	<string name="settings_engine_pending">修改会在浏览器下次同步时生效</string>
 	<string name="settings_data">数据与备份</string>
 	<string name="settings_export_short">导出（.zip）</string>

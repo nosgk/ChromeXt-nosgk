@@ -14,7 +14,10 @@ class EngineConfigTest {
     assertTrue(config.cspRules)
     assertTrue(config.webViewDebug)
     assertTrue(config.erudaEnabled)
+    assertFalse(config.erudaAuto)
     assertTrue(config.allowPrivileged)
+    assertTrue(config.injectionEnabled)
+    assertTrue(config.installConfirm)
   }
 
   @Test
@@ -26,13 +29,19 @@ class EngineConfigTest {
                 EngineConfig.KEY_CSP_RULES to "false",
                 EngineConfig.KEY_WEBVIEW_DEBUG to "true",
                 EngineConfig.KEY_ERUDA to "false",
+                EngineConfig.KEY_ERUDA_AUTO to "true",
                 EngineConfig.KEY_ALLOW_PRIVILEGED to "false",
+                EngineConfig.KEY_INJECTION to "false",
+                EngineConfig.KEY_INSTALL_CONFIRM to "false",
             ))
     assertFalse(config.keepStorage)
     assertFalse(config.cspRules)
     assertTrue(config.webViewDebug)
     assertFalse(config.erudaEnabled)
+    assertTrue(config.erudaAuto)
     assertFalse(config.allowPrivileged)
+    assertFalse(config.injectionEnabled)
+    assertFalse(config.installConfirm)
   }
 
   @Test

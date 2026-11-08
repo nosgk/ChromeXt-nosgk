@@ -261,18 +261,25 @@ object ScriptDbManager {
     codes.clear()
     if (asyncEvaluation) codes.add(initScript)
     if (runScripts) {
-      scripts
-          .filter {
-            it.enabled &&
-                matching(it, url) &&
-                it.appliesTo(Chrome.packageName) &&
-                !(frameId != null && it.noframes)
-          }
-          .sortedBy { it.sortOrder }
-          .forEach {
-            if (it.grant.contains("frames")) framesGranted = true
-            GM.bootstrap(it, codes)
-          }
+      if (engine.injectionEnabled) {
+        scripts
+            .filter {
+              it.enabled &&
+                  matching(it, url) &&
+                  it.appliesTo(Chrome.packageName) &&
+                  !(frameId != null && it.noframes)
+            }
+            .sortedBy { it.sortOrder }
+            .forEach {
+              if (it.grant.contains("frames")) framesGranted = true
+              GM.bootstrap(it, codes)
+            }
+      }
+      if (frameId == null && engine.erudaEnabled && engine.erudaAuto) {
+        // Mounts the console on load; the snippet asks the module for the Eruda source the first
+        // time and reuses the browser-local cache afterwards.
+        codes.add(Local.openEruda)
+      }
       if (!asyncEvaluation) Chrome.evaluateJavascript(codes, webView, frameId)
     }
     if (asyncEvaluation)

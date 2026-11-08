@@ -53,6 +53,7 @@ object LsposedScope {
           "/data/adb/vector/config/$DB_NAME",
           "/data/adb/vector/config/lspd/$DB_NAME",
           "/data/adb/apatch/config/$DB_NAME",
+          "/data/adb/lspd/config_backup/$DB_NAME",
       )
 
   @Volatile private var cached: ScopeResult? = null
@@ -132,7 +133,9 @@ object LsposedScope {
       }
     }
     if (found.isEmpty()) found += CANDIDATES
-    return found.toList()
+    // Prefer the live config over a `config_backup` directory; `find` can return a stale backup
+    // even when the live file exists.
+    return found.sortedWith(compareBy({ it.contains("backup") }, { it.length }))
   }
 
   private fun copyDatabase(path: String, target: File): Boolean {
@@ -178,31 +181,61 @@ object LsposedScope {
     return -1
   }
 
+  /**
+   * Old LSPosed stores `modules(mid, module_pkg_name, …)` with `scope(mid, app_pkg_name, user_id)`;
+   * Vector 2.x stores `modules(module_pkg_name, apk_path)` with
+   * `scope(module_pkg_name, app_pkg_name, user_id)`. Detect the columns instead of assuming one
+   * generation: the old JOIN throws "no such column: s.mid" on the new schema, which is what made
+   * the reader report "cannot query" on Vector.
+   */
   private fun queryScope(database: File): Set<String>? {
-    val queries =
-        listOf(
-            """
-            SELECT s.app_pkg_name
-            FROM scope s JOIN modules m ON s.mid = m.mid
-            WHERE m.module_pkg_name = ?
-            """
-                .trimIndent(),
-            "SELECT app_pkg_name FROM scope WHERE mid IN (SELECT mid FROM modules WHERE module_pkg_name = ?)",
-        )
-    for (sql in queries) {
-      val result =
-          runCatching {
-                // Read-write so SQLite can replay the copied WAL sidecar.
-                SQLiteDatabase.openDatabase(database.path, null, SQLiteDatabase.OPEN_READWRITE)
-                    .use { db ->
-                      db.rawQuery(sql, arrayOf(MODULE_PACKAGE)).use { cursor ->
-                        buildSet { while (cursor.moveToNext()) add(cursor.getString(0)) }
-                      }
-                    }
-              }
-              .getOrNull()
-      if (result != null) return result
+    val db =
+        runCatching {
+              // Read-write so SQLite can replay the copied WAL sidecar.
+              SQLiteDatabase.openDatabase(database.path, null, SQLiteDatabase.OPEN_READWRITE)
+            }
+            .getOrNull() ?: return null
+    return try {
+      val scopeColumns = tableColumns(db, "scope")
+      if (scopeColumns.isEmpty()) return null
+      val queries =
+          buildList {
+            if ("module_pkg_name" in scopeColumns) {
+              add("SELECT app_pkg_name FROM scope WHERE module_pkg_name = ?")
+            }
+            if ("mid" in scopeColumns) {
+              add(
+                  "SELECT s.app_pkg_name FROM scope s JOIN modules m ON s.mid = m.mid " +
+                      "WHERE m.module_pkg_name = ?")
+              add(
+                  "SELECT app_pkg_name FROM scope WHERE mid IN " +
+                      "(SELECT mid FROM modules WHERE module_pkg_name = ?)")
+            }
+          }
+      for (sql in queries) {
+        val result =
+            runCatching {
+                  db.rawQuery(sql, arrayOf(MODULE_PACKAGE)).use { cursor ->
+                    buildSet { while (cursor.moveToNext()) add(cursor.getString(0)) }
+                  }
+                }
+                .getOrNull()
+        if (result != null) return result
+      }
+      null
+    } finally {
+      runCatching { db.close() }
     }
-    return null
+  }
+
+  private fun tableColumns(db: SQLiteDatabase, table: String): Set<String> {
+    val columns = mutableSetOf<String>()
+    runCatching {
+      db.rawQuery("PRAGMA table_info($table)", null).use { cursor ->
+        val index = cursor.getColumnIndexOrThrow("name")
+        while (cursor.moveToNext()) columns += cursor.getString(index)
+      }
+    }
+    return columns
   }
 }
