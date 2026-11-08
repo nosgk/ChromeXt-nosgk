@@ -115,6 +115,7 @@ object ScriptDbManager {
                 updateUrl = record.updateUrl,
                 iconUrl = record.iconUrl,
                 lastUpdated = record.lastUpdated,
+                apps = parseApps(record.apps),
                 lib = existing?.lib ?: emptyList(),
             )
           }
@@ -236,7 +237,12 @@ object ScriptDbManager {
     if (asyncEvaluation) codes.add(initScript)
     if (runScripts) {
       scripts
-          .filter { it.enabled && matching(it, url) && !(frameId != null && it.noframes) }
+          .filter {
+            it.enabled &&
+                matching(it, url) &&
+                it.appliesTo(Chrome.packageName) &&
+                !(frameId != null && it.noframes)
+          }
           .sortedBy { it.sortOrder }
           .forEach {
             if (it.grant.contains("frames")) framesGranted = true
@@ -285,6 +291,7 @@ object ScriptDbManager {
                 updateUrl = record.updateUrl,
                 iconUrl = record.iconUrl,
                 lastUpdated = record.lastUpdated,
+                apps = parseApps(record.apps),
             )
           }
         }

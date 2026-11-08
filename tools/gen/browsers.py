@@ -3,7 +3,7 @@
 
 Generated files:
   app/src/main/kotlin/org/matrix/chromext/browser/BrowserCatalog.kt
-  app/src/main/res/values/arrays.xml
+  app/src/main/resources/META-INF/xposed/scope.list
   the <queries> block in app/src/main/AndroidManifest.xml
 
 Run with --check to verify that the committed files are current.
@@ -21,7 +21,7 @@ CONFIG = ROOT / "browser" / "browsers.json"
 CATALOG = (
     ROOT / "app" / "src" / "main" / "kotlin" / "org" / "matrix" / "chromext" / "browser" / "BrowserCatalog.kt"
 )
-ARRAYS = ROOT / "app" / "src" / "main" / "res" / "values" / "arrays.xml"
+SCOPE_LIST = ROOT / "app" / "src" / "main" / "resources" / "META-INF" / "xposed" / "scope.list"
 MANIFEST = ROOT / "app" / "src" / "main" / "AndroidManifest.xml"
 
 BEGIN = "    <!-- BEGIN GENERATED BROWSERS -->"
@@ -71,17 +71,9 @@ def render_catalog(chromium: list[str], webview: list[str]) -> str:
     )
 
 
-def render_arrays(chromium: list[str], webview: list[str]) -> str:
-    scope = sorted(chromium + webview)
-    items = "\n".join(f"\t\t<item>{item}</item>" for item in scope)
-    return (
-        '<?xml version="1.0" encoding="utf-8"?>\n'
-        "<resources>\n"
-        '\t<string-array name="xposedscope">\n'
-        f"{items}\n"
-        "\t</string-array>\n"
-        "</resources>\n"
-    )
+def render_scope_list(chromium: list[str], webview: list[str]) -> str:
+    """libxposed Modern API default scope: one package name per line."""
+    return "\n".join(sorted(chromium + webview)) + "\n"
 
 
 def render_queries(chromium: list[str], webview: list[str]) -> str:
@@ -105,7 +97,7 @@ def main() -> int:
     chromium, webview = load()
     outputs = {
         CATALOG: render_catalog(chromium, webview),
-        ARRAYS: render_arrays(chromium, webview),
+        SCOPE_LIST: render_scope_list(chromium, webview),
         MANIFEST: render_manifest(MANIFEST.read_text(encoding="utf-8"), chromium, webview),
     }
 

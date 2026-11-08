@@ -38,6 +38,7 @@ object ScriptActions : ActionGroup {
                               customInclude = existing.customInclude,
                               customExclude = existing.customExclude,
                               customRunAt = existing.customRunAt,
+                              apps = existing.apps,
                               lib = existing.lib,
                           )
                         }
@@ -102,6 +103,7 @@ object ScriptActions : ActionGroup {
                               customRunAt = script.customRunAt,
                               updateUrl = script.updateUrl,
                               iconUrl = script.iconUrl,
+                              apps = script.apps,
                               lib = script.lib,
                               lastUpdated = System.currentTimeMillis(),
                           )

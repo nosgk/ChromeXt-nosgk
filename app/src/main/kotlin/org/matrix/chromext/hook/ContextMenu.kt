@@ -10,7 +10,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.PopupWindow
 import android.widget.TextView
-import de.robv.android.xposed.XC_MethodHook.Unhook
+import org.matrix.chromext.utils.Unhook
 import java.lang.Class
 import java.lang.ref.WeakReference
 import org.matrix.chromext.Chrome

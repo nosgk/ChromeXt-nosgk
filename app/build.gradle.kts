@@ -11,8 +11,8 @@ android {
     applicationId = "org.matrix.chromext"
     minSdk = 21
     targetSdk = 35
-    versionCode = 18
-    versionName = "3.9.1"
+    versionCode = 19
+    versionName = "3.10.0"
 
     // Compose ships a graphics-path native library. Publish the arm64-v8a slice only, which is
     // what the release artifact name promises.
@@ -60,7 +60,9 @@ android {
 }
 
 dependencies {
-  compileOnly("de.robv.android.xposed:api:82")
+  // Modern libxposed API (LSPosed 1.10+/Vector/current LSPatch). compileOnly: the framework
+  // provides the classes at runtime, and bundling them would break the module.
+  compileOnly("io.github.libxposed:api:102.0.0")
 
   val composeBom = platform("androidx.compose:compose-bom:2025.06.01")
   implementation(composeBom)

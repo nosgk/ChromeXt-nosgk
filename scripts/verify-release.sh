@@ -42,6 +42,28 @@ if (( SIZE > MAX_BYTES )); then
   exit 1
 fi
 
+echo "Checking libxposed Modern API metadata..."
+JAVA_INIT="$(unzip -p "$APK" META-INF/xposed/java_init.list 2>/dev/null || true)"
+if ! printf '%s\n' "$JAVA_INIT" | grep -qx 'org.matrix.chromext.MainHook'; then
+  echo "error: META-INF/xposed/java_init.list does not list org.matrix.chromext.MainHook" >&2
+  exit 1
+fi
+
+MODULE_PROP="$(unzip -p "$APK" META-INF/xposed/module.prop 2>/dev/null || true)"
+if ! printf '%s\n' "$MODULE_PROP" | grep -qx 'targetApiVersion=102'; then
+  echo "error: module.prop does not target libxposed API 102" >&2
+  exit 1
+fi
+if ! printf '%s\n' "$MODULE_PROP" | grep -qx 'minApiVersion=100'; then
+  echo "error: module.prop does not declare minApiVersion=100" >&2
+  exit 1
+fi
+
+if ! unzip -p "$APK" META-INF/xposed/scope.list | grep -qx 'com.android.chrome'; then
+  echo "error: scope.list is missing the default browser scope" >&2
+  exit 1
+fi
+
 echo "Checking MainHook.<init>()..."
 "$APKANALYZER" dex code \
   --class org.matrix.chromext.MainHook \

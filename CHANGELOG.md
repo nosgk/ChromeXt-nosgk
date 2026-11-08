@@ -2,6 +2,38 @@
 
 All notable changes to this fork are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the module's `versionName`.
 
+## [3.10.0] - 2026-11-08
+
+### Added
+
+- Migrated the Xposed integration to the libxposed Modern API 102 (`io.github.libxposed:api:102.0.0`). The module now ships `META-INF/xposed/{module.prop,java_init.list,scope.list}` and no longer uses `assets/xposed_init` or the legacy manifest metadata.
+- Simplified Chinese UI (`values-zh`) with every Compose string moved into resources.
+- Per-app script scope: the `apps` column (schema v11) limits a script to selected packages; an empty list keeps the previous "all hooked apps" behavior.
+- Hooked-apps screen with runtime reporting (`hooked_app` table, provider `reportHookedApp`) plus installed-but-inactive supported browsers.
+- Manual script update checks against `@updateURL`/`@downloadURL`, version comparison, and one-tap update that preserves local settings and GM storage.
+- Theme mode selector (follow system / light / dark) and an About page with the fork and upstream links plus the current version.
+- Loading skeletons, empty/error states, adaptive card grid, item animations and app badges in the script list.
+- `INTERNET` permission for the manager process so update checks work under LSPosed.
+
+### Changed
+
+- The parser now drops unknown `@run-at` values and non-http(s) update URLs, and deduplicates `@match`/`@grant` entries.
+- Search is debounced (180 ms) and uses a precomputed per-script haystack; filter, sort and search state survive configuration changes.
+- Script list filtering, sorting and app scoping are applied consistently in the UI and at injection time.
+- Manager database writes run off the main thread with optimistic UI updates.
+
+### Fixed
+
+- New scripts receive a unique id instead of overwriting the previous "New Script" row.
+- Editor state is keyed per script, so switching scripts no longer reuses stale edits.
+- Saving a script keeps its `sortOrder` instead of resetting it to zero.
+- Deleting all scripts asks for confirmation.
+- "Install from URL" now validates the scheme and caps the download at 4 MiB.
+
+### Removed
+
+- The legacy `de.robv.android.xposed:api:82` dependency, `assets/xposed_init`, the legacy `xposed*` manifest metadata and `res/values/arrays.xml` (the scope now lives in `META-INF/xposed/scope.list`).
+
 ## [Unreleased]
 
 ### Added
@@ -54,6 +86,7 @@ All notable changes to this fork are documented here. The format follows [Keep a
 - Support for the MVC page menu design.
 - Loading-state tracking for browsers where `mIsLoading` cannot be located.
 
-[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.9.1...HEAD
+[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.10.0...HEAD
+[3.10.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.10.0
 [3.9.1]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.9.0...v3.9.1
 [3.9.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.9.0

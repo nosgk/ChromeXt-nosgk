@@ -17,6 +17,8 @@ data class Script(
     val lib: List<String> = mutableListOf<String>(),
     val noframes: Boolean,
     val enabled: Boolean = true,
+    /** Empty means every hooked app; otherwise the script is only injected into these packages. */
+    val apps: List<String> = emptyList(),
     val sortOrder: Int = 0,
     val customMatch: String = "",
     val customInclude: String = "",
@@ -40,7 +42,38 @@ data class Script(
     val custom = customExclude.lines().filter { it.isNotBlank() }
     return custom.ifEmpty { exclude.toList() }
   }
+
+  /**
+   * Whether this script runs inside [packageName]. An empty app list keeps the pre-3.10 behavior
+   * (every hooked app), and an unknown package name never filters scripts out.
+   */
+  fun appliesTo(packageName: String?): Boolean =
+      apps.isEmpty() || packageName == null || apps.contains(packageName)
 }
+
+/** Stored as a comma separated list; empty means "all hooked apps". */
+fun parseApps(raw: String): List<String> =
+    raw.split(',').map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+
+fun encodeApps(apps: List<String>): String =
+    apps.map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(",")
+
+data class HookedApp(
+    val packageName: String,
+    val label: String,
+    val versionName: String,
+    val lastSeen: Long,
+)
+
+private const val SQL_CREATE_HOOKED_APPS =
+    """
+    CREATE TABLE IF NOT EXISTS hooked_app (
+      package_name TEXT PRIMARY KEY NOT NULL,
+      label TEXT NOT NULL DEFAULT '',
+      version_name TEXT NOT NULL DEFAULT '',
+      last_seen INTEGER NOT NULL DEFAULT 0
+    );
+    """
 
 private const val SQL_CREATE_ENTRIES =
     """
@@ -57,7 +90,8 @@ private const val SQL_CREATE_ENTRIES =
       custom_run_at TEXT NOT NULL DEFAULT '',
       update_url TEXT NOT NULL DEFAULT '',
       icon_url TEXT NOT NULL DEFAULT '',
-      last_updated INTEGER NOT NULL DEFAULT 0
+      last_updated INTEGER NOT NULL DEFAULT 0,
+      apps TEXT NOT NULL DEFAULT ''
     );
     """
 
@@ -66,6 +100,7 @@ class ScriptDbHelper(context: Context) :
 
   override fun onCreate(db: SQLiteDatabase) {
     db.execSQL(SQL_CREATE_ENTRIES)
+    db.execSQL(SQL_CREATE_HOOKED_APPS)
   }
 
   override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -103,6 +138,11 @@ class ScriptDbHelper(context: Context) :
       addColumn(db, "icon_url", "TEXT NOT NULL DEFAULT ''")
       addColumn(db, "last_updated", "INTEGER NOT NULL DEFAULT 0")
     }
+
+    if (oldVersion < 11) {
+      addColumn(db, "apps", "TEXT NOT NULL DEFAULT ''")
+      db.execSQL(SQL_CREATE_HOOKED_APPS)
+    }
   }
 
   private fun addColumn(db: SQLiteDatabase, name: String, definition: String) {
@@ -117,7 +157,7 @@ class ScriptDbHelper(context: Context) :
   }
 
   companion object {
-    const val DATABASE_VERSION = 10
+    const val DATABASE_VERSION = 11
     const val DATABASE_NAME = "userscript"
   }
 }

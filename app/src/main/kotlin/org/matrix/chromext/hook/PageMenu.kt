@@ -9,7 +9,7 @@ import android.view.MenuInflater
 import android.view.MenuItem
 import android.view.View
 import android.widget.ImageButton
-import de.robv.android.xposed.XC_MethodHook.Unhook
+import org.matrix.chromext.utils.Unhook
 import java.lang.reflect.Modifier
 import java.util.ArrayList
 import java.util.LinkedHashSet

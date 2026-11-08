@@ -24,6 +24,8 @@ data class ScriptRecord(
     val updateUrl: String,
     val iconUrl: String,
     val lastUpdated: Long,
+    /** Comma separated package names; empty means every hooked app. */
+    val apps: String = "",
 ) {
   fun toJson(): JSONObject =
       JSONObject().apply {
@@ -40,6 +42,7 @@ data class ScriptRecord(
         put("updateUrl", updateUrl)
         put("iconUrl", iconUrl)
         put("lastUpdated", lastUpdated)
+        put("apps", apps)
       }
 
   companion object {
@@ -58,6 +61,7 @@ data class ScriptRecord(
             updateUrl = json.optString("updateUrl"),
             iconUrl = json.optString("iconUrl"),
             lastUpdated = json.optLong("lastUpdated", 0L),
+            apps = json.optString("apps"),
         )
   }
 }
@@ -77,6 +81,7 @@ fun Script.toRecord(): ScriptRecord =
         updateUrl = updateUrl,
         iconUrl = iconUrl,
         lastUpdated = lastUpdated,
+        apps = encodeApps(apps),
     )
 
 /** Thin CRUD over the `script` table, usable from both the browser and the provider process. */
@@ -110,6 +115,7 @@ class ScriptStore(context: Context) {
                 updateUrl = cursor.string("update_url"),
                 iconUrl = cursor.string("icon_url"),
                 lastUpdated = cursor.long("last_updated", 0L),
+                apps = cursor.string("apps"),
             ))
       }
     } finally {
@@ -135,6 +141,7 @@ class ScriptStore(context: Context) {
           put("update_url", record.updateUrl)
           put("icon_url", record.iconUrl)
           put("last_updated", record.lastUpdated)
+          put("apps", record.apps)
         }
     return db.insertWithOnConflict("script", null, values, SQLiteDatabase.CONFLICT_REPLACE) != -1L
   }
@@ -157,6 +164,7 @@ class ScriptStore(context: Context) {
           put("update_url", record.updateUrl)
           put("icon_url", record.iconUrl)
           put("last_updated", record.lastUpdated)
+          put("apps", record.apps)
         }
     return db.insertWithOnConflict("script", null, values, SQLiteDatabase.CONFLICT_IGNORE) != -1L
   }
@@ -182,6 +190,44 @@ class ScriptStore(context: Context) {
 
   fun close() {
     helper.close()
+  }
+
+  /** Apps the module has actually been injected into, most recently seen first. */
+  fun hookedApps(): List<HookedApp> {
+    val cursor = helper.readableDatabase.query("hooked_app", null, null, null, null, null, null)
+    val result = mutableListOf<HookedApp>()
+    try {
+      while (cursor.moveToNext()) {
+        result.add(
+            HookedApp(
+                packageName = cursor.string("package_name"),
+                label = cursor.string("label"),
+                versionName = cursor.string("version_name"),
+                lastSeen = cursor.long("last_seen", 0L),
+            ))
+      }
+    } finally {
+      cursor.close()
+    }
+    return result.sortedByDescending { it.lastSeen }
+  }
+
+  fun reportHookedApp(
+      packageName: String,
+      label: String,
+      versionName: String,
+      lastSeen: Long = System.currentTimeMillis(),
+  ): Boolean {
+    if (packageName.isBlank()) return false
+    val values =
+        ContentValues().apply {
+          put("package_name", packageName)
+          put("label", label)
+          put("version_name", versionName)
+          put("last_seen", lastSeen)
+        }
+    return helper.writableDatabase
+        .insertWithOnConflict("hooked_app", null, values, SQLiteDatabase.CONFLICT_REPLACE) != -1L
   }
 
   private fun Cursor.string(name: String, default: String = ""): String {

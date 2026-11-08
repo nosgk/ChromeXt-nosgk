@@ -107,11 +107,44 @@ def check_package_lists() -> None:
     )
     block = catalog.split("val supportedPackages", 1)[1].split(")", 1)[0]
     supported = set(re.findall(r'"([a-z0-9_.]+)"', block))
-    arrays_path = ROOT / "app" / "src" / "main" / "res" / "values" / "arrays.xml"
-    arrays = set(re.findall(r"<item>([^<]+)</item>", read(arrays_path)))
-    missing = sorted(supported - arrays)
+    scope_path = ROOT / "app" / "src" / "main" / "resources" / "META-INF" / "xposed" / "scope.list"
+    scope = {line.strip() for line in read(scope_path).splitlines() if line.strip()}
+    missing = sorted(supported - scope)
     if missing:
-        fail(f"arrays.xml: missing supported packages: {', '.join(missing)}")
+        fail(f"META-INF/xposed/scope.list: missing supported packages: {', '.join(missing)}")
+
+
+def check_xposed_metadata() -> None:
+    meta_dir = ROOT / "app" / "src" / "main" / "resources" / "META-INF" / "xposed"
+    module_prop = meta_dir / "module.prop"
+    java_init = meta_dir / "java_init.list"
+    if not module_prop.exists():
+        fail("missing META-INF/xposed/module.prop")
+    if not java_init.exists():
+        fail("missing META-INF/xposed/java_init.list")
+    if not module_prop.exists() or not java_init.exists():
+        return
+
+    props = {}
+    for line in read(module_prop).splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            props[key.strip()] = value.strip()
+    if props.get("targetApiVersion") != "102":
+        fail("module.prop: targetApiVersion must be 102")
+    if props.get("minApiVersion") != "100":
+        fail("module.prop: minApiVersion must be 100")
+
+    build = read(ROOT / "app" / "build.gradle.kts")
+    version = re.search(r'versionName\s*=\s*"([^"]+)"', build)
+    version_code = re.search(r"versionCode\s*=\s*(\d+)", build)
+    if version and props.get("version") != version.group(1):
+        fail("module.prop: version does not match app/build.gradle.kts versionName")
+    if version_code and props.get("versionCode") != version_code.group(1):
+        fail("module.prop: versionCode does not match app/build.gradle.kts versionCode")
+
+    if "org.matrix.chromext.MainHook" not in read(java_init):
+        fail("java_init.list: entry class org.matrix.chromext.MainHook is missing")
 
 
 def check_local_links() -> None:
@@ -153,6 +186,7 @@ def main() -> int:
     check_readme()
     check_version()
     check_package_lists()
+    check_xposed_metadata()
     check_local_links()
     check_ci_scripts()
     check_no_internal_docs()

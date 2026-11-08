@@ -1,9 +1,11 @@
 package org.matrix.chromext.ui
 
 import android.content.Context
+import org.matrix.chromext.script.HookedApp
 import org.matrix.chromext.script.Script
 import org.matrix.chromext.script.ScriptRecord
 import org.matrix.chromext.script.ScriptStore
+import org.matrix.chromext.script.parseApps
 import org.matrix.chromext.script.parseScript
 import org.matrix.chromext.script.toRecord
 
@@ -29,6 +31,8 @@ class ScriptRepository(context: Context) {
 
   fun updateStorage(id: String, storage: String): Boolean = store.updateStorage(id, storage)
 
+  fun hookedApps(): List<HookedApp> = store.hookedApps()
+
   fun close() {
     store.close()
   }
@@ -46,6 +50,7 @@ class ScriptRepository(context: Context) {
         updateUrl = record.updateUrl,
         iconUrl = record.iconUrl,
         lastUpdated = record.lastUpdated,
+        apps = parseApps(record.apps),
     )
   }
 }

@@ -63,4 +63,18 @@ object CentralBridge {
     val extras = Bundle().apply { putString("records", array.toString()) }
     return call("migrateLegacyScripts", extras)?.getInt("inserted", 0) ?: 0
   }
+
+  /**
+   * Records that this process was hooked. The provider validates that the caller owns the package,
+   * so a script cannot claim an app it does not belong to.
+   */
+  fun reportHookedApp(packageName: String, label: String, versionName: String): Boolean {
+    val extras =
+        Bundle().apply {
+          putString("package", packageName)
+          putString("label", label)
+          putString("version", versionName)
+        }
+    return call("reportHookedApp", extras)?.getBoolean("ok") == true
+  }
 }

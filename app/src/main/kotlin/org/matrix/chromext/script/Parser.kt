@@ -93,24 +93,34 @@ fun parseScript(
     if (hydrateRequires) {
       Chrome.IO.submit { script.require.forEach { runCatching { lib.add(downloadLib(it)) } } }
     }
+    // Keep the stored parameters inside the values the injector understands: an unknown @run-at
+    // would otherwise silently fall back in GM.js, and a non-http update URL can never be fetched.
+    val runAt =
+        script.runAt.trim().takeIf {
+          it == "document-start" || it == "document-end" || it == "document-idle"
+        } ?: ""
+    val updateUrl =
+        script.updateUrl.trim().takeIf {
+          it.startsWith("http://") || it.startsWith("https://")
+        } ?: ""
     val parsed =
         Script(
             script.namespace + ":" + script.name,
-            script.match.toTypedArray(),
-            script.grant.toTypedArray(),
-            script.exclude.toTypedArray(),
+            script.match.distinct().toTypedArray(),
+            script.grant.distinct().toTypedArray(),
+            script.exclude.distinct().toTypedArray(),
             script.meta,
             script.code,
             script.storage,
             lib,
             script.noframes,
-            updateUrl = script.updateUrl,
+            updateUrl = updateUrl,
             iconUrl = script.iconUrl,
             lastUpdated = System.currentTimeMillis(),
             version = script.version,
             author = script.author,
             description = script.description,
-            runAt = script.runAt,
+            runAt = runAt,
         )
     return parsed
   }

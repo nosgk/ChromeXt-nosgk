@@ -42,9 +42,11 @@ ChromeXt 会 hook `onUpdateUrl`（见 [UserScript.kt](app/src/main/kotlin/org/ma
 ## 环境要求
 
 - Android 5.0 及以上（API 21+），**arm64-v8a** 设备。
-- Xposed 框架，二选一：
-  - 有 root：使用 [Vector](https://github.com/JingMatrix/Vector) 或 LSPosed；
-  - 无 root：使用打过补丁的 [LSPatch](https://github.com/JingMatrix/LSPatch) 构建。
+- 支持 **libxposed Modern API 100 及以上**的框架（本模块已迁移到 API 102）：
+  - 有 root：LSPosed 1.10+ 或 [Vector](https://github.com/JingMatrix/Vector)；
+  - 无 root：带 libxposed 支持的新版 [LSPatch](https://github.com/JingMatrix/LSPatch) 构建。
+
+> 注意：3.10.0 起模块只声明 libxposed Modern API 入口（`META-INF/xposed/`），不再提供旧的 `assets/xposed_init`。只支持旧 Xposed API 82 的框架或旧版 LSPatch **不会加载**本模块，升级前请先确认框架版本。
 
 模块代码本身与 CPU 架构无关，但发布用的 APK 只打包了 Compose 图形路径原生库的 arm64-v8a 切片，因此产物统一命名为 `ChromeXt-arm64-v8a.apk`。这也是为什么在 32 位或 x86 设备上不能直接使用官方发布包。
 
@@ -108,10 +110,16 @@ ChromeXt 自带一个用 Jetpack Compose 编写的原生管理面板。可以从
 面板目前支持：
 
 - 已安装脚本列表，带搜索、筛选、排序与一键启用/停用；
+- 按「已 Hook 的应用」过滤和管理脚本，每个脚本可以单独指定只在哪些应用里运行；
+- 「应用」页展示真正被注入过的应用（含最近激活时间与脚本数量），以及已安装但尚未激活的支持浏览器；
+- 手动检查脚本更新：拉取 `@updateURL`/`@downloadURL`，比较版本后一键更新，并保留本地设置与 GM 存储；
 - 代码编辑器，以及每个脚本的独立设置（`@run-at`、自定义 `@match` / `@include` / `@exclude`、更新地址）；
 - `GM_storage` 查看与编辑；
 - 安装确认页，展示目标站点、申请的权限与代码预览；
-- ZIP 备份与恢复（支持 ChromeXt 自有格式，也支持纯 `.user.js` 压缩包）。
+- ZIP 备份与恢复（支持 ChromeXt 自有格式，也支持纯 `.user.js` 压缩包）；
+- 主题切换（跟随系统 / 浅色 / 深色）与「关于」页（本分支与上游链接、当前版本号）。
+
+界面文案已全部资源化，并提供简体中文翻译；中文系统的设备会自动使用中文。
 
 脚本保存在模块内的中央数据库里，并从各浏览器原有的旧数据库做一次性迁移。如果模块进程不可用（例如被某些 OEM 的后台策略杀掉），浏览器会自动回退到本地数据库，保证脚本仍然可用。
 
@@ -133,7 +141,7 @@ ChromeXt 自带一个用 Jetpack Compose 编写的原生管理面板。可以从
 
 构建**只在 GitHub Actions 上运行**，工作流是**手动触发**（`workflow_dispatch`），任何 push 都不会自动触发。详见 [.github/workflows/build.yml](.github/workflows/build.yml)。
 
-该工作流会执行 `assembleRelease`，校验 Xposed 入口与 arm64-v8a 切片，用存放在 `release` 环境中的密钥库签名 APK，最后上传 `ChromeXt-arm64-v8a.apk` 并附带 SHA256 校验值。
+该工作流会执行 `assembleRelease`，校验 libxposed 入口（`META-INF/xposed/java_init.list`、`module.prop` 的 `targetApiVersion=102`、`scope.list`）与 arm64-v8a 切片，用存放在 `release` 环境中的密钥库签名 APK，最后上传 `ChromeXt-arm64-v8a.apk` 并附带 SHA256 校验值。
 
 工作流**刻意没有单独的 CI/测试阶段**。这不是偷懒，而是为了把构建时间压到最低、并避免「CI 绿了但产物不可用」的假安全感；所有检查请按下面的命令在本地跑。
 
@@ -173,26 +181,31 @@ node --test tools/js-tests/*.test.js
 | WebView 浏览器支持 | [WebView.kt](app/src/main/kotlin/org/matrix/chromext/hook/WebView.kt) |
 | Hook 兼容层 | [proxy/](app/src/main/kotlin/org/matrix/chromext/proxy)、[hook/](app/src/main/kotlin/org/matrix/chromext/hook) |
 | 原生管理面板 | [ui/](app/src/main/kotlin/org/matrix/chromext/ui) |
+| 脚本更新检查 | [UpdateChecker.kt](app/src/main/kotlin/org/matrix/chromext/ui/UpdateChecker.kt) |
 | 中央数据库与 Provider | [ScriptStore.kt](app/src/main/kotlin/org/matrix/chromext/script/ScriptStore.kt)、[ScriptContentProvider.kt](app/src/main/kotlin/org/matrix/chromext/provider/ScriptContentProvider.kt) |
+| libxposed 入口与元数据 | [MainHook.kt](app/src/main/kotlin/org/matrix/chromext/MainHook.kt)、`app/src/main/resources/META-INF/xposed/` |
 
 ## 已知差异与限制
 
 - **与 Tampermonkey 的行为差异**：API 覆盖面接近，但并非完全等价，部分语义是有意简化的，遇到脚本不工作时先对照 `Local.kt` / `GM.js`。
+- **只支持 libxposed Modern API**：3.10.0 起不再提供旧 Xposed API 82 入口，只支持 API 100+ 的框架；旧框架与旧版 LSPatch 不会加载模块。
 - **只发 arm64-v8a**：发布产物仅包含 arm64-v8a 切片，其他架构需要自行构建。
 - **无 CI 测试阶段**：如前述，测试靠本地执行，仓库不保证每次提交都经过完整验证。
 - **依赖 Xposed 生态**：模块行为会随 LSPosed / LSPatch / Vector 的版本变化而波动，某些 ROM 的后台限制也会影响模块进程的存活。
+- **已 Hook 应用列表依赖运行时上报**：只有真正被注入过的应用才会出现在「已激活」里；纯安装但没打开过的应用只会显示为「已安装，尚未激活」。
 - **AI 生成的代码**：这是本分支最需要你警惕的一条，见开头的警告。
 
-## 路线图
+## 3.10.0 更新内容
 
-以下能力是当前正在推进的方向，**尚未包含在已发布版本中**，列在这里是为了让使用者知道后续会往哪里走，而不是把它们当作已有功能：
+上一版 README 里列为「路线图」的能力，现在都已经落地：
 
-- 界面全面支持中文；
-- 原生脚本管理面板按「已 Hook 的应用」分别管理脚本；
-- 检查脚本更新；
-- 查看已 Hook 的应用列表；
-- 暗色模式支持手动切换（目前仅跟随系统）；
-- 新增「关于」页，展示本分支与上游仓库的 GitHub 链接以及当前版本号。
+- 界面全面支持中文，文案全部资源化，中文系统自动生效；
+- 原生脚本管理面板支持按「已 Hook 的应用」分别管理脚本，脚本可以指定只在某些应用内运行；
+- 支持手动检查脚本更新，比较 `@version` 后可一键更新，并保留本地设置与 GM 存储；
+- 新增「应用」页，展示已激活与已安装未激活的应用；
+- 暗色模式支持跟随系统 / 浅色 / 深色三种模式；
+- 新增「关于」页，展示本分支与上游仓库链接以及当前版本号；
+- Xposed 接入迁移到 libxposed Modern API 102。
 
 ## 反馈与贡献
 

@@ -30,6 +30,9 @@ class ScriptContentProvider : ContentProvider() {
   }
 
   override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
+    // Reporting is open to any hooked app (including ones the user added to the Xposed scope by
+    // hand), so it is validated by package ownership instead of the browser whitelist below.
+    if (method == "reportHookedApp") return reportHookedApp(extras ?: Bundle())
     if (!callerAllowed()) {
       throw SecurityException("ChromeXt provider: caller UID is not a supported browser")
     }
@@ -79,6 +82,20 @@ class ScriptContentProvider : ContentProvider() {
       }
       else -> null
     }
+  }
+
+  private fun reportHookedApp(bundle: Bundle): Bundle {
+    val packageName =
+        bundle.getString("package") ?: return Bundle().apply { putBoolean("ok", false) }
+    val uid = Binder.getCallingUid()
+    val owned = context?.packageManager?.getPackagesForUid(uid) ?: emptyArray()
+    // Only the app itself may report that it was hooked; otherwise any process could pollute the
+    // list with packages it does not own.
+    if (packageName !in owned) return Bundle().apply { putBoolean("ok", false) }
+    val label = bundle.getString("label") ?: ""
+    val versionName = bundle.getString("version") ?: ""
+    val ok = store?.reportHookedApp(packageName, label, versionName) ?: false
+    return Bundle().apply { putBoolean("ok", ok) }
   }
 
   private fun callerAllowed(): Boolean {

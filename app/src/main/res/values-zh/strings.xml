@@ -1,0 +1,167 @@
+<resources>
+	<string name="app_name">ChromeXt</string>
+	<string name="view_in_chrome">在 Chrome 中打开</string>
+	<string name="xposed_desc">为 Chromium 系与 WebView 系浏览器提供用户脚本与开发者工具支持</string>
+	<string name="main_menu_extension">扩展</string>
+	<string name="main_menu_script_manager">脚本管理</string>
+	<string name="main_menu_install_script">安装用户脚本</string>
+	<string name="main_menu_developer_tools">开发者工具</string>
+	<string name="main_menu_eruda_console">Eruda 控制台</string>
+
+	<!-- 导航 -->
+	<string name="nav_scripts">脚本</string>
+	<string name="nav_apps">应用</string>
+	<string name="nav_settings">设置</string>
+	<string name="nav_about">关于</string>
+
+	<!-- 通用操作 -->
+	<string name="action_ok">确定</string>
+	<string name="action_cancel">取消</string>
+	<string name="action_save">保存</string>
+	<string name="action_delete">删除</string>
+	<string name="action_back">返回</string>
+	<string name="action_install">安装</string>
+	<string name="action_edit">编辑</string>
+	<string name="action_update">更新</string>
+	<string name="action_retry">重试</string>
+	<string name="action_clear">清除</string>
+	<string name="error_title">出错了</string>
+	<string name="loading">加载中…</string>
+
+	<!-- 脚本列表 -->
+	<string name="scripts_title">ChromeXt（已启用 %1$d/%2$d）</string>
+	<string name="search_hint">搜索名称、匹配规则或代码</string>
+	<string name="filter_all">全部</string>
+	<string name="filter_enabled">已启用</string>
+	<string name="filter_disabled">已禁用</string>
+	<string name="filter_this_page">本页</string>
+	<string name="sort_order">默认顺序</string>
+	<string name="sort_name">名称</string>
+	<string name="sort_updated">更新时间</string>
+	<string name="fab_new">新建脚本</string>
+	<string name="fab_import">导入 .user.js</string>
+	<string name="fab_install_url">从链接安装</string>
+	<string name="delete_script_title">删除脚本？</string>
+	<string name="delete_script_body">将删除 %1$s。</string>
+	<string name="install_from_url_title">从链接安装</string>
+	<string name="install_from_url_hint">https://example.com/script.user.js</string>
+	<string name="error_read_file">无法读取所选文件</string>
+	<string name="error_invalid_userscript">无效的用户脚本</string>
+	<string name="error_download">无法下载脚本</string>
+	<string name="empty_no_scripts">还没有安装脚本</string>
+	<string name="empty_no_scripts_hint">导入 .user.js 文件，或手动新建一个。</string>
+	<string name="empty_no_match">没有匹配的脚本</string>
+	<string name="empty_no_match_hint">换个关键词，或清除筛选条件。</string>
+	<string name="empty_clear_filters">清除筛选</string>
+	<string name="skeleton_loading">正在加载脚本…</string>
+	<string name="list_error_hint">无法读取脚本数据库。</string>
+	<string name="badge_custom_match">自定义匹配</string>
+	<string name="badge_all_apps">全部应用</string>
+	<string name="badge_apps">%1$d 个应用</string>
+	<string name="check_updates">检查更新</string>
+	<string name="checking_updates">正在检查 %1$d 个脚本…</string>
+	<string name="update_available">有更新：v%1$s → v%2$s</string>
+	<string name="update_none">所有脚本都是最新版本</string>
+	<string name="update_available_count">%1$d 个脚本有更新</string>
+	<string name="update_result_title">更新检查</string>
+	<string name="update_apply_title">更新脚本？</string>
+	<string name="update_apply_body">将 %1$s 更新到 v%2$s？本地设置与 GM 存储会保留。</string>
+	<string name="update_applied">已更新 %1$s</string>
+	<string name="update_error_no_url">没有更新地址</string>
+	<string name="update_error_bad_url">更新地址无效</string>
+	<string name="update_error_network">网络错误</string>
+	<string name="update_error_http">服务器返回错误</string>
+	<string name="update_error_too_large">脚本文件过大</string>
+	<string name="update_error_invalid">下载的内容不是有效脚本</string>
+	<string name="update_error_id_mismatch">下载的脚本名称不一致</string>
+
+	<!-- 脚本编辑器 -->
+	<string name="editor_tab_code">代码</string>
+	<string name="editor_tab_settings">设置</string>
+	<string name="editor_tab_values">变量</string>
+	<string name="editor_metadata">元数据</string>
+	<string name="editor_code">代码</string>
+	<string name="editor_enabled">启用</string>
+	<string name="editor_run_at">运行时机</string>
+	<string name="run_at_default">默认</string>
+	<string name="run_at_start">文档开始</string>
+	<string name="run_at_end">文档结束</string>
+	<string name="run_at_idle">空闲</string>
+	<string name="editor_custom_match">自定义 @match（每行一条）</string>
+	<string name="editor_custom_include">自定义 @include（每行一条）</string>
+	<string name="editor_custom_exclude">自定义 @exclude（每行一条）</string>
+	<string name="editor_update_url">更新地址</string>
+	<string name="editor_storage">GM_storage JSON</string>
+	<string name="editor_apps">适用应用</string>
+	<string name="editor_apps_all">全部已 Hook 应用</string>
+	<string name="editor_apps_select">选择应用</string>
+	<string name="editor_apps_hint">留空表示所有已 Hook 的应用。</string>
+	<string name="editor_check_update">检查更新</string>
+	<string name="editor_error_storage">GM_storage 不是合法的 JSON</string>
+	<string name="editor_error_metadata">元数据块无效</string>
+	<string name="editor_error_run_at">@run-at 只能是 document-start、document-end 或 document-idle</string>
+	<string name="editor_error_update_url">更新地址必须以 http:// 或 https:// 开头</string>
+	<string name="editor_error_version">缺少 @version</string>
+	<string name="editor_saved">已保存</string>
+
+	<!-- 设置 -->
+	<string name="settings_database">数据库</string>
+	<string name="settings_db_checking">正在检查中央数据库…</string>
+	<string name="settings_db_available">中央数据库可用</string>
+	<string name="settings_db_unavailable">中央数据库不可用，浏览器会回退到本地数据库</string>
+	<string name="settings_appearance">外观</string>
+	<string name="settings_theme">主题</string>
+	<string name="theme_system">跟随系统</string>
+	<string name="theme_light">浅色</string>
+	<string name="theme_dark">深色</string>
+	<string name="settings_browsers">浏览器</string>
+	<string name="settings_browsers_more">另有 %1$d 个</string>
+	<string name="settings_keep_storage">持久化 GM 存储</string>
+	<string name="settings_keep_storage_hint">更新脚本时保留变量</string>
+	<string name="settings_export">导出备份（.zip）</string>
+	<string name="settings_import">导入备份（.zip）</string>
+	<string name="settings_delete_all">删除全部脚本</string>
+	<string name="settings_delete_all_title">删除全部脚本？</string>
+	<string name="settings_delete_all_body">此操作无法撤销，建议先导出备份。</string>
+	<string name="settings_backup_exported">备份已导出</string>
+	<string name="settings_backup_failed">导出失败</string>
+	<string name="settings_backup_imported">已导入 %1$d 个脚本</string>
+	<string name="settings_backup_import_failed">导入失败</string>
+	<string name="settings_deleted_all">已删除全部脚本</string>
+	<string name="settings_version">ChromeXt %1$s</string>
+
+	<!-- 已 Hook 应用 -->
+	<string name="apps_title">已 Hook 应用</string>
+	<string name="apps_active">已激活</string>
+	<string name="apps_inactive">已安装，尚未激活</string>
+	<string name="apps_last_seen">最近激活 %1$s</string>
+	<string name="apps_script_count">%1$d 个脚本</string>
+	<string name="apps_empty">还没有已 Hook 的应用</string>
+	<string name="apps_empty_hint">打开一次作用域内的浏览器，它就会出现在这里。</string>
+	<string name="apps_manage">管理脚本</string>
+	<string name="apps_no_scripts">这个应用还没有脚本</string>
+	<string name="apps_filter_title">%1$s 的脚本</string>
+	<string name="apps_all_scripts">全部脚本</string>
+	<string name="apps_unknown">未知应用</string>
+
+	<!-- 关于 -->
+	<string name="about_title">关于</string>
+	<string name="about_version">版本 %1$s</string>
+	<string name="about_fork">本分支仓库</string>
+	<string name="about_upstream">上游项目</string>
+	<string name="about_license">许可证</string>
+	<string name="about_disclaimer_title">说明</string>
+	<string name="about_disclaimer">本仓库是 JingMatrix/ChromeXt 的第三方分支，由 AI 大量修改。遇到问题请只在本仓库反馈，不要去找上游。代码主要由 AI 编写，不提供任何保证，使用风险自负。</string>
+
+	<!-- 安装页 -->
+	<string name="install_title">安装用户脚本</string>
+	<string name="install_reading">正在读取脚本…</string>
+	<string name="install_target_sites">目标站点</string>
+	<string name="install_permissions">请求权限</string>
+	<string name="install_code_preview">代码预览</string>
+	<string name="install_author">作者：%1$s</string>
+	<string name="install_version">v%1$s</string>
+	<string name="install_version_diff">v%1$s → v%2$s</string>
+	<string name="install_error_read">无法读取脚本</string>
+	<string name="install_error_invalid">无效的用户脚本</string>
+</resources>

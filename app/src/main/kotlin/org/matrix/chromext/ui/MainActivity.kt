@@ -2,11 +2,21 @@ package org.matrix.chromext.ui
 
 import android.Manifest
 import android.content.pm.PackageManager
+import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 
 class MainActivity : ComponentActivity() {
 
@@ -16,8 +26,27 @@ class MainActivity : ComponentActivity() {
     val activeUrl = intent?.getStringExtra(EXTRA_ACTIVE_URL)
     val editId = intent?.getStringExtra(EXTRA_EDIT_ID)
     setContent {
-      ChromeXtTheme {
-        Surface { ChromeXtApp(activeUrl = activeUrl, editId = editId) }
+      val context = LocalContext.current
+      var mode by remember { mutableStateOf(ThemePrefs.load(context)) }
+      val dark = isDarkMode(mode, isSystemInDarkTheme())
+      // The XML theme cannot follow a manual override, so paint the window to match Compose and
+      // avoid a white flash before the first frame (and a light border while resizing).
+      SideEffect {
+        window.setBackgroundDrawable(
+            ColorDrawable(if (dark) DARK_WINDOW else LIGHT_WINDOW))
+      }
+      ChromeXtTheme(mode) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+          ChromeXtApp(
+              activeUrl = activeUrl,
+              editId = editId,
+              themeMode = mode,
+              onThemeModeChange = {
+                mode = it
+                ThemePrefs.save(context, it)
+              },
+          )
+        }
       }
     }
   }
@@ -33,5 +62,8 @@ class MainActivity : ComponentActivity() {
   companion object {
     const val EXTRA_ACTIVE_URL = "active_url"
     const val EXTRA_EDIT_ID = "edit_id"
+
+    private const val DARK_WINDOW = 0xFF1C1B1F.toInt()
+    private const val LIGHT_WINDOW = 0xFFFEF7FF.toInt()
   }
 }

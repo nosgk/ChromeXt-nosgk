@@ -85,4 +85,39 @@ class ParserTest {
             .readText()
     assertEquals("ChromeXt:NoTrailingNewline", parseScript(input)!!.id)
   }
+
+  @Test
+  fun dropsUnknownRunAtAndNonHttpUpdateUrl() {
+    val input =
+        """
+        // ==UserScript==
+        // @name Params
+        // @match https://example.com/*
+        // @run-at nonsense
+        // @updateURL file:///tmp/demo.user.js
+        // ==/UserScript==
+        """
+            .trimIndent()
+    val script = parseScript(input)!!
+    assertEquals("", script.runAt)
+    assertEquals("", script.updateUrl)
+  }
+
+  @Test
+  fun deduplicatesGrantAndMatchEntries() {
+    val input =
+        """
+        // ==UserScript==
+        // @name Duplicates
+        // @match https://example.com/*
+        // @match https://example.com/*
+        // @grant GM_setValue
+        // @grant GM_setValue
+        // ==/UserScript==
+        """
+            .trimIndent()
+    val script = parseScript(input)!!
+    assertEquals(1, script.match.size)
+    assertEquals(1, script.grant.count { it == "GM_setValue" })
+  }
 }

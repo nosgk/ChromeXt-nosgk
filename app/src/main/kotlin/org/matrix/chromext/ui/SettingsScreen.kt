@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,18 +12,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -34,11 +34,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.matrix.chromext.BuildConfig
+import org.matrix.chromext.R
 import org.matrix.chromext.browser.BrowserCatalog
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,33 +48,32 @@ import org.matrix.chromext.browser.BrowserCatalog
 fun SettingsScreen(
     modifier: Modifier,
     repository: ScriptRepository,
-    onBack: () -> Unit,
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit,
     onChanged: () -> Unit,
+    onMessage: (String) -> Unit,
 ) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
   val prefs = remember { context.getSharedPreferences("ChromeXt", Context.MODE_PRIVATE) }
   var keepStorage by remember { mutableStateOf(prefs.getBoolean("keep_storage", true)) }
-  var status by remember { mutableStateOf("Checking the central database...") }
-  var message by remember { mutableStateOf<String?>(null) }
+  var status by remember { mutableStateOf<Boolean?>(null) }
+  var confirmDeleteAll by remember { mutableStateOf(false) }
 
   LaunchedEffect(Unit) {
     status =
         withContext(Dispatchers.IO) {
-          val available =
-              runCatching {
-                    context.contentResolver
-                        .call(
-                            Uri.parse("content://org.matrix.chromext.scripts"),
-                            "ping",
-                            null,
-                            null,
-                        )
-                        ?.getBoolean("available") == true
-                  }
-                  .getOrDefault(false)
-          if (available) "Central database reachable"
-          else "Central database unavailable; browser processes use the local fallback"
+          runCatching {
+                context.contentResolver
+                    .call(
+                        Uri.parse("content://org.matrix.chromext.scripts"),
+                        "ping",
+                        null,
+                        null,
+                    )
+                    ?.getBoolean("available") == true
+              }
+              .getOrDefault(false)
         }
   }
 
@@ -82,7 +83,9 @@ fun SettingsScreen(
         if (uri != null) {
           scope.launch {
             val ok = withContext(Dispatchers.IO) { Backup.export(context, repository.records(), uri) }
-            message = if (ok) "Backup exported" else "Export failed"
+            onMessage(
+                context.getString(
+                    if (ok) R.string.settings_backup_exported else R.string.settings_backup_failed))
           }
         }
       }
@@ -92,24 +95,17 @@ fun SettingsScreen(
         if (uri != null) {
           scope.launch {
             val count = withContext(Dispatchers.IO) { Backup.import(context, uri) }
-            message = if (count >= 0) "Imported $count scripts" else "Import failed"
-            onChanged()
+            onMessage(
+                if (count >= 0) context.getString(R.string.settings_backup_imported, count)
+                else context.getString(R.string.settings_backup_import_failed))
+            if (count >= 0) onChanged()
           }
         }
       }
 
   Scaffold(
       modifier = modifier,
-      topBar = {
-        TopAppBar(
-            title = { Text("Settings") },
-            navigationIcon = {
-              IconButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back")
-              }
-            },
-        )
-      },
+      topBar = { TopAppBar(title = { Text(stringResource(R.string.nav_settings)) }) },
   ) { padding ->
     Column(
         modifier =
@@ -118,19 +114,64 @@ fun SettingsScreen(
     ) {
       Card {
         Column(modifier = Modifier.padding(12.dp)) {
-          Text("Database", style = MaterialTheme.typography.titleMedium)
-          Text(status, style = MaterialTheme.typography.bodySmall)
+          Text(stringResource(R.string.settings_database), style = MaterialTheme.typography.titleMedium)
+          Text(
+              when (status) {
+                null -> stringResource(R.string.settings_db_checking)
+                true -> stringResource(R.string.settings_db_available)
+                false -> stringResource(R.string.settings_db_unavailable)
+              },
+              style = MaterialTheme.typography.bodySmall,
+          )
         }
       }
       Card {
         Column(modifier = Modifier.padding(12.dp)) {
-          Text("Browsers", style = MaterialTheme.typography.titleMedium)
+          Text(
+              stringResource(R.string.settings_appearance),
+              style = MaterialTheme.typography.titleMedium,
+          )
+          Text(
+              stringResource(R.string.settings_theme),
+              style = MaterialTheme.typography.bodySmall,
+              modifier = Modifier.padding(top = 6.dp),
+          )
+          Row(
+              modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+              horizontalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            ThemeMode.entries.forEach { mode ->
+              FilterChip(
+                  selected = themeMode == mode,
+                  onClick = { onThemeModeChange(mode) },
+                  label = {
+                    Text(
+                        stringResource(
+                            when (mode) {
+                              ThemeMode.SYSTEM -> R.string.theme_system
+                              ThemeMode.LIGHT -> R.string.theme_light
+                              ThemeMode.DARK -> R.string.theme_dark
+                            }))
+                  },
+              )
+            }
+          }
+        }
+      }
+      Card {
+        Column(modifier = Modifier.padding(12.dp)) {
+          Text(
+              stringResource(R.string.settings_browsers),
+              style = MaterialTheme.typography.titleMedium,
+          )
           BrowserCatalog.supportedPackages.take(10).forEach {
             Text(it, style = MaterialTheme.typography.bodySmall)
           }
           if (BrowserCatalog.supportedPackages.size > 10) {
             Text(
-                "and ${BrowserCatalog.supportedPackages.size - 10} more",
+                stringResource(
+                    R.string.settings_browsers_more,
+                    BrowserCatalog.supportedPackages.size - 10),
                 style = MaterialTheme.typography.bodySmall,
             )
           }
@@ -138,9 +179,9 @@ fun SettingsScreen(
       }
       Row(verticalAlignment = Alignment.CenterVertically) {
         Column(modifier = Modifier.weight(1f)) {
-          Text("Persistent GM storage")
+          Text(stringResource(R.string.settings_keep_storage))
           Text(
-              "Keep values when a script is updated",
+              stringResource(R.string.settings_keep_storage_hint),
               style = MaterialTheme.typography.bodySmall,
           )
         }
@@ -156,7 +197,7 @@ fun SettingsScreen(
           onClick = { exportLauncher.launch("ChromeXt-backup.zip") },
           modifier = Modifier.fillMaxWidth(),
       ) {
-        Text("Export backup (.zip)")
+        Text(stringResource(R.string.settings_export))
       }
       Button(
           onClick = {
@@ -164,23 +205,46 @@ fun SettingsScreen(
           },
           modifier = Modifier.fillMaxWidth(),
       ) {
-        Text("Import backup (.zip)")
+        Text(stringResource(R.string.settings_import))
       }
       OutlinedButton(
-          onClick = {
-            repository.delete(repository.records().map { it.id }.toTypedArray())
-            onChanged()
-            message = "All scripts deleted"
-          },
+          onClick = { confirmDeleteAll = true },
           modifier = Modifier.fillMaxWidth(),
       ) {
-        Text("Delete all scripts")
+        Text(stringResource(R.string.settings_delete_all))
       }
       Text(
-          "ChromeXt ${BuildConfig.VERSION_NAME}",
+          stringResource(R.string.settings_version, BuildConfig.VERSION_NAME),
           style = MaterialTheme.typography.bodySmall,
       )
-      message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
+  }
+
+  if (confirmDeleteAll) {
+    AlertDialog(
+        onDismissRequest = { confirmDeleteAll = false },
+        title = { Text(stringResource(R.string.settings_delete_all_title)) },
+        text = { Text(stringResource(R.string.settings_delete_all_body)) },
+        confirmButton = {
+          TextButton(
+              onClick = {
+                confirmDeleteAll = false
+                scope.launch {
+                  withContext(Dispatchers.IO) {
+                    repository.delete(repository.records().map { it.id }.toTypedArray())
+                  }
+                  onChanged()
+                  onMessage(context.getString(R.string.settings_deleted_all))
+                }
+              }) {
+                Text(stringResource(R.string.action_delete))
+              }
+        },
+        dismissButton = {
+          TextButton(onClick = { confirmDeleteAll = false }) {
+            Text(stringResource(R.string.action_cancel))
+          }
+        },
+    )
   }
 }

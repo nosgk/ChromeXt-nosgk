@@ -41,9 +41,11 @@ jobs:
         with:
           cache-read-only: false
 
+      - name: Validate (temporary)
+        run: ./gradlew --no-daemon ktfmtCheck testDebugUnitTest
+
       - name: Build release
         run: ./gradlew --no-daemon assembleRelease
-
       - name: Verify release APK
         run: bash scripts/verify-release.sh
 

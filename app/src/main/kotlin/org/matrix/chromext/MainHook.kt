@@ -2,12 +2,13 @@ package org.matrix.chromext
 
 import android.app.AndroidAppHelper
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import de.robv.android.xposed.IXposedHookLoadPackage
-import de.robv.android.xposed.IXposedHookZygoteInit
-import de.robv.android.xposed.callbacks.XC_LoadPackage
+import io.github.libxposed.api.XposedModule
+import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
+import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 import org.matrix.chromext.browser.BrowserCatalog
 import org.matrix.chromext.hook.BaseHook
 import org.matrix.chromext.hook.ContextMenuHook
@@ -16,22 +17,41 @@ import org.matrix.chromext.hook.PageMenuHook
 import org.matrix.chromext.hook.PreferenceHook
 import org.matrix.chromext.hook.UserScriptHook
 import org.matrix.chromext.hook.WebViewHook
+import org.matrix.chromext.script.CentralBridge
 import org.matrix.chromext.utils.Log
+import org.matrix.chromext.utils.XposedApi
 import org.matrix.chromext.utils.findMethodOrNull
 import org.matrix.chromext.utils.hookAfter
 
-class MainHook : IXposedHookLoadPackage, IXposedHookZygoteInit {
-  override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
-    Log.d(lpparam.processName + " started")
-    if (lpparam.packageName == "org.matrix.chromext") return
-    if (BrowserCatalog.supportedPackages.contains(lpparam.packageName)) {
+/**
+ * libxposed Modern API entry point (API 102).
+ *
+ * The legacy `IXposedHookLoadPackage` / `IXposedHookZygoteInit` pair is gone: module path and
+ * process information now come from the module instance, and hooks are installed from
+ * [onPackageReady], which fires once the package class loader exists and before the app starts.
+ */
+class MainHook : XposedModule() {
+
+  @Volatile private var reported = false
+
+  override fun onModuleLoaded(param: ModuleLoadedParam) {
+    XposedApi.install(this)
+    Resource.init(getModuleApplicationInfo().sourceDir)
+    Log.d(param.processName + " module loaded")
+  }
+
+  override fun onPackageReady(param: PackageReadyParam) {
+    Log.d(param.packageName + " started")
+    if (param.packageName == "org.matrix.chromext") return
+    val classLoader = param.classLoader
+    if (BrowserCatalog.supportedPackages.contains(param.packageName)) {
       // Every constructor taking a Context, rather than a fixed index into an order the JLS leaves
       // unspecified: browsers do not agree on how many constructors WindowAndroid has, and Whale in
       // particular has no one-argument overload, so index 1 there is a test-only constructor the
       // browser never calls and the whole module stays inert. The overloads delegate into one
       // another, so hooking all of them just means the callback can run twice, which Chrome.init
       // and initHooks both already absorb.
-      val windowAndroid = lpparam.classLoader.loadClass("org.chromium.ui.base.WindowAndroid")
+      val windowAndroid = classLoader.loadClass("org.chromium.ui.base.WindowAndroid")
       val constructors =
           windowAndroid.declaredConstructors.filter {
             val first = it.parameterTypes.firstOrNull()
@@ -40,7 +60,8 @@ class MainHook : IXposedHookLoadPackage, IXposedHookZygoteInit {
       if (constructors.isEmpty()) Log.e("No WindowAndroid constructor takes a Context")
       constructors.forEach { constructor ->
         constructor.hookAfter {
-          Chrome.init(it.args[0] as Context, lpparam.packageName)
+          Chrome.init(it.args[0] as Context, param.packageName)
+          reportHookedApp(param.packageName, param.applicationInfo)
           // Keep the menu hooks reachable even when the UserScript hook cannot be installed
           runCatching { initHooks(UserScriptHook) }.onFailure { Log.ex(it) }
           if (ContextMenuHook.isInit) return@hookAfter
@@ -73,14 +94,17 @@ class MainHook : IXposedHookLoadPackage, IXposedHookZygoteInit {
 
       Chrome.isMi =
           Chrome.isMi ||
-              lpparam.packageName == "com.mi.globalbrowser" ||
-              lpparam.packageName == "com.android.browser"
-      Chrome.isQihoo = lpparam.packageName == "com.qihoo.contents"
+              param.packageName == "com.mi.globalbrowser" ||
+              param.packageName == "com.android.browser"
+      Chrome.isQihoo = param.packageName == "com.qihoo.contents"
 
       if (ctx == null && Chrome.isMi) return
       // Wait to get the browser context of Mi Browser
 
-      if (ctx != null && lpparam.packageName != "android") Chrome.init(ctx, ctx.packageName)
+      if (ctx != null && param.packageName != "android") {
+        Chrome.init(ctx, ctx.packageName)
+        reportHookedApp(param.packageName, param.applicationInfo)
+      }
 
       if (Chrome.isMi) {
         WebViewHook.WebView = Chrome.load("com.miui.webkit.WebView")
@@ -143,6 +167,19 @@ class MainHook : IXposedHookLoadPackage, IXposedHookZygoteInit {
     }
   }
 
+  private fun reportHookedApp(packageName: String, info: ApplicationInfo) {
+    if (reported) return
+    reported = true
+    val label =
+        runCatching {
+              val pm = AndroidAppHelper.currentApplication()?.packageManager
+              if (pm == null) "" else info.loadLabel(pm).toString()
+            }
+            .getOrDefault("")
+    val versionName = info.versionName ?: ""
+    Chrome.IO.submit { CentralBridge.reportHookedApp(packageName, label, versionName) }
+  }
+
   private fun hookWebView() {
     if (WebViewHook.ChromeClient == null || WebViewHook.ViewClient == null) return
     if (WebViewHook.WebView == null) {
@@ -153,10 +190,6 @@ class MainHook : IXposedHookLoadPackage, IXposedHookZygoteInit {
           .onFailure { if (BuildConfig.DEBUG) Log.ex(it) }
     }
     initHooks(WebViewHook, ContextMenuHook)
-  }
-
-  override fun initZygote(startupParam: IXposedHookZygoteInit.StartupParam) {
-    Resource.init(startupParam.modulePath)
   }
 
   private fun initHooks(vararg hook: BaseHook) {
