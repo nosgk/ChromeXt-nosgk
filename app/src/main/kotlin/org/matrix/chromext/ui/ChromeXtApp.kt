@@ -188,28 +188,26 @@ fun ChromeXtApp(
 
   fun applyUpdate(script: Script, info: UpdateInfo) {
     val remote = info.remote ?: return
-    val keepStorage =
-        context
-            .getSharedPreferences("ChromeXt", Context.MODE_PRIVATE)
-            .getBoolean("keep_storage", true)
-    // Preserve everything the user configured locally; only meta/code/version come from the
-    // downloaded script.
-    val merged =
-        remote.copy(
-            enabled = script.enabled,
-            apps = script.apps,
-            sortOrder = script.sortOrder,
-            customMatch = script.customMatch,
-            customInclude = script.customInclude,
-            customExclude = script.customExclude,
-            customRunAt = script.customRunAt,
-            updateUrl = script.updateUrl.ifBlank { remote.updateUrl },
-            iconUrl = script.iconUrl.ifBlank { remote.iconUrl },
-            storage = if (keepStorage) script.storage else null,
-            lastUpdated = System.currentTimeMillis(),
-            lib = script.lib,
-        )
     scope.launch {
+      val keepStorage =
+          withContext(Dispatchers.IO) { repository.engineConfig().keepStorage }
+      // Preserve everything the user configured locally; only meta/code/version come from the
+      // downloaded script.
+      val merged =
+          remote.copy(
+              enabled = script.enabled,
+              apps = script.apps,
+              sortOrder = script.sortOrder,
+              customMatch = script.customMatch,
+              customInclude = script.customInclude,
+              customExclude = script.customExclude,
+              customRunAt = script.customRunAt,
+              updateUrl = script.updateUrl.ifBlank { remote.updateUrl },
+              iconUrl = script.iconUrl.ifBlank { remote.iconUrl },
+              storage = if (keepStorage) script.storage else null,
+              lastUpdated = System.currentTimeMillis(),
+              lib = script.lib,
+          )
       val saved = withContext(Dispatchers.IO) { repository.save(merged) }
       if (saved) {
         scripts = scripts.map { if (it.id == script.id) merged else it }

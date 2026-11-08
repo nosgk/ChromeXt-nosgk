@@ -155,8 +155,8 @@ fun AppsScreen(
           includeAll ||
               it.active ||
               it.scoped ||
-              it.packageName in catalog ||
-              it.packageName in scriptScopes
+              it.packageName in scriptScopes ||
+              (it.installed && it.packageName in catalog)
         }
         .filter {
           needle.isEmpty() ||
