@@ -4,7 +4,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.matrix.chromext.Chrome
 import org.matrix.chromext.script.Local
-import org.matrix.chromext.script.ScriptDbHelper
 import org.matrix.chromext.script.ScriptDbManager
 import org.matrix.chromext.script.parseScript
 import org.matrix.chromext.utils.Log
@@ -22,11 +21,23 @@ object ScriptActions : ActionGroup {
                   callback = "alert('Invalid UserScript');"
                 } else {
                   Log.i("Install script ${script.id}")
-                  ScriptDbManager.apply {
-                    insert(script)
-                    scripts.removeAll(scripts.filter { it.id == script.id })
-                    scripts.add(script)
-                  }
+                  val existing = ScriptDbManager.scripts.find { it.id == script.id }
+                  val toInsert =
+                      if (existing == null) {
+                        script
+                      } else {
+                        // Re-installing keeps the user's enable state, ordering and overrides.
+                        script.copy(
+                            enabled = existing.enabled,
+                            sortOrder = existing.sortOrder,
+                            customMatch = existing.customMatch,
+                            customInclude = existing.customInclude,
+                            customExclude = existing.customExclude,
+                            customRunAt = existing.customRunAt,
+                            lib = existing.lib,
+                        )
+                      }
+                  ScriptDbManager.insert(toInsert)
                 }
                 callback
               },
@@ -76,9 +87,20 @@ object ScriptActions : ActionGroup {
                         parseScript(
                             data.getString("meta") + script.code, script.storage?.toString())
                     if (newScript != null) {
-                      ScriptDbManager.insert(newScript)
-                      ScriptDbManager.scripts.remove(script)
-                      ScriptDbManager.scripts.add(newScript)
+                      val updated =
+                          newScript.copy(
+                              enabled = script.enabled,
+                              sortOrder = script.sortOrder,
+                              customMatch = script.customMatch,
+                              customInclude = script.customInclude,
+                              customExclude = script.customExclude,
+                              customRunAt = script.customRunAt,
+                              updateUrl = script.updateUrl,
+                              iconUrl = script.iconUrl,
+                              lib = script.lib,
+                              lastUpdated = System.currentTimeMillis(),
+                          )
+                      ScriptDbManager.insert(updated)
                     } else {
                       callback = "alert('Fail to update script metadata');"
                     }
@@ -87,11 +109,7 @@ object ScriptActions : ActionGroup {
                     val ids = Array(jsonArray.length()) { jsonArray.getString(it) }
                     val scripts = ScriptDbManager.scripts.filter { ids.contains(it.id) }
                     if (data.optBoolean("delete")) {
-                      val dbHelper = ScriptDbHelper(Chrome.getContext())
-                      val db = dbHelper.writableDatabase
-                      db.delete("script", "id = ?", ids)
-                      ScriptDbManager.scripts.removeAll(scripts)
-                      dbHelper.close()
+                      ScriptDbManager.delete(ids)
                     } else {
                       val result = JSONArray(scripts.map { it.meta })
                       callback = "ChromeXt.post('script_meta', ${result});"

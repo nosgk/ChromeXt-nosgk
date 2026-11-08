@@ -10,6 +10,10 @@ All notable changes to this fork are documented here. The format follows [Keep a
 - Documentation consistency checks (`tools/docs/check_docs.py`).
 - Release verification (`scripts/verify-release.sh`) and APK signing (`scripts/sign-apk.sh`) scripts.
 - Issue templates, pull-request checklist and `CODEOWNERS`.
+- Database schema v10: `enabled`, `sort_order`, `custom_match`, `custom_include`, `custom_exclude`, `custom_run_at`, `update_url`, `icon_url` and `last_updated`.
+- Central script database exposed to browser processes through `ScriptContentProvider`, with a one-time legacy migration and a local fallback when the provider is unreachable.
+- UserScript metadata parsing for `@version`, `@author`, `@description`, `@icon`, `@updateURL` and `@run-at`.
+- `@run-at` and match/exclude overrides are applied at injection time.
 
 ### Changed
 

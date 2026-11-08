@@ -13,7 +13,11 @@ private val blocksReg =
         """(?<metablock>[\S\s]*?// ==UserScript==\r?\n[\S\s]*?\r?\n// ==/UserScript==\s+)(?<code>[\S\s]*)""")
 private val metaReg = Regex("""^//\s+@(?<key>[\w-]+)(\s+(?<value>.+))?""")
 
-fun parseScript(input: String, storage: String? = null): Script? {
+fun parseScript(
+    input: String,
+    storage: String? = null,
+    hydrateRequires: Boolean = true,
+): Script? {
   val blockMatchGroup = blocksReg.matchEntire(input)?.groups
   if (blockMatchGroup == null) {
     return null
@@ -27,6 +31,12 @@ fun parseScript(input: String, storage: String? = null): Script? {
         var grant = mutableListOf<String>()
         var exclude = mutableListOf<String>()
         var require = mutableListOf<String>()
+        var version = ""
+        var author = ""
+        var description = ""
+        var iconUrl = ""
+        var updateUrl = ""
+        var runAt = ""
         val meta = (blockMatchGroup[1]?.value as String)
         val code = blockMatchGroup[2]?.value as String
         var storage: JSONObject? = null
@@ -46,6 +56,12 @@ fun parseScript(input: String, storage: String? = null): Script? {
           "grant" -> script.grant.add(value)
           "exclude" -> script.exclude.add(value)
           "require" -> script.require.add(value)
+          "version" -> script.version = value
+          "author" -> script.author = value
+          "description" -> script.description = value
+          "icon", "iconURL" -> script.iconUrl = value
+          "updateURL", "downloadURL" -> script.updateUrl = value
+          "run-at" -> script.runAt = value
           "noframes" -> script.noframes = true
         }
       } else {
@@ -74,7 +90,9 @@ fun parseScript(input: String, storage: String? = null): Script? {
     return null
   } else {
     val lib = mutableListOf<String>()
-    Chrome.IO.submit { script.require.forEach { runCatching { lib.add(downloadLib(it)) } } }
+    if (hydrateRequires) {
+      Chrome.IO.submit { script.require.forEach { runCatching { lib.add(downloadLib(it)) } } }
+    }
     val parsed =
         Script(
             script.namespace + ":" + script.name,
@@ -86,6 +104,13 @@ fun parseScript(input: String, storage: String? = null): Script? {
             script.storage,
             lib,
             script.noframes,
+            updateUrl = script.updateUrl,
+            iconUrl = script.iconUrl,
+            lastUpdated = System.currentTimeMillis(),
+            version = script.version,
+            author = script.author,
+            description = script.description,
+            runAt = script.runAt,
         )
     return parsed
   }

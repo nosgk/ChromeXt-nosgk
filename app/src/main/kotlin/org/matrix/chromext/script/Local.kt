@@ -16,6 +16,14 @@ import org.matrix.chromext.utils.randomString
 object GM {
   private val localScript: Map<String, String>
 
+  /** The metadata block with the per-script @run-at override applied, if one is set. */
+  private fun effectiveMeta(script: Script): String {
+    val runAt = script.customRunAt.ifBlank { script.runAt }
+    if (runAt.isBlank()) return script.meta
+    val without = script.meta.replace(Regex("""(?m)^//\s+@run-at.*\r?\n"""), "")
+    return without.replace("// ==/UserScript==", "// @run-at $runAt\n// ==/UserScript==")
+  }
+
   init {
     val ctx = Chrome.getContext()
     Resource.enrich(ctx)
@@ -41,9 +49,10 @@ object GM {
   ): MutableList<String> {
     var code = script.code
     var grants = ""
+    val meta = effectiveMeta(script)
 
-    if (!script.meta.startsWith("// ==UserScript==")) {
-      code = script.meta + code
+    if (!meta.startsWith("// ==UserScript==")) {
+      code = meta + code
     }
 
     script.grant.forEach {
@@ -78,7 +87,7 @@ object GM {
     }
 
     grants += localScript.get("GM.bootstrap")!!
-    val GM_info = JSONObject(mapOf("scriptMetaStr" to script.meta))
+    val GM_info = JSONObject(mapOf("scriptMetaStr" to meta))
     GM_info.put("script", JSONObject().put("id", script.id))
     if (script.storage != null) GM_info.put("storage", script.storage)
     code = "\ndelete window.__loading__;\n${code};"

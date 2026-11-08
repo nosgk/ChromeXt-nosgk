@@ -51,12 +51,12 @@ private fun urlMatch(match: String, url: String, strict: Boolean): Boolean {
 }
 
 fun matching(script: Script, url: String): Boolean {
-  script.exclude.forEach {
+  script.effectiveExcludeRules().forEach {
     if (urlMatch(it, url, true)) {
       return false
     }
   }
-  script.match.forEach {
+  script.effectiveMatchRules().forEach {
     if (urlMatch(it, url, false)) {
       // Log.d("${script.id} injected")
       return true

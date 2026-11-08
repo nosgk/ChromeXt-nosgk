@@ -1,11 +1,7 @@
 package org.matrix.chromext.script
 
-import android.content.ContentValues
 import android.content.Context
-import android.database.AbstractWindowedCursor
-import android.database.CursorWindow
 import android.net.Uri
-import android.os.Build
 import java.util.concurrent.CopyOnWriteArrayList
 import org.json.JSONArray
 import org.json.JSONObject
@@ -23,12 +19,17 @@ import org.matrix.chromext.utils.shouldBypassSandbox
 
 object ScriptDbManager {
 
-  // Read from page-injection threads while Listener may add/remove scripts from the UI thread.
+  private const val PREFS = "ChromeXt"
+  private const val MIGRATED_KEY = "migrated_to_central_v10"
+
+  // Read from page-injection threads while actions may add/remove scripts from the UI thread.
   val scripts: MutableList<Script> = CopyOnWriteArrayList(query())
   val cosmeticFilters: MutableMap<String, String>
   val userAgents: MutableMap<String, String>
   val cspRules: MutableMap<String, String>
   var keepStorage: Boolean
+
+  @Volatile private var lastRefresh = 0L
 
   init {
     val ctx = Chrome.getContext()
@@ -46,35 +47,99 @@ object ScriptDbManager {
             as MutableMap<String, String>
 
     keepStorage =
-        ctx.getSharedPreferences("ChromeXt", Context.MODE_PRIVATE).getBoolean("keep_storage", true)
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("keep_storage", true)
+
+    Chrome.IO.submit { syncWithCentral() }
   }
 
   fun insert(vararg script: Script) {
-    val dbHelper = ScriptDbHelper(Chrome.getContext())
-    val db = dbHelper.writableDatabase
+    val store = ScriptStore(Chrome.getContext())
     script.forEach {
-      val lines = db.delete("script", "id = ?", arrayOf(it.id))
-      if (lines > 0) {
-        val id = it.id
-        Log.d("Update ${lines} rows with id ${id}")
-        if (keepStorage) it.storage = scripts.find { it.id == id }?.storage
+      val existing = scripts.find { s -> s.id == it.id }
+      if (existing != null && keepStorage) it.storage = existing.storage
+      val record =
+          it.toRecord().let { r ->
+            if (r.lastUpdated == 0L) r.copy(lastUpdated = System.currentTimeMillis()) else r
+          }
+      if (store.upsert(record)) {
+        scripts.removeAll(scripts.filter { s -> s.id == it.id })
+        scripts.add(it.copy(lastUpdated = record.lastUpdated))
+        Chrome.IO.submit { CentralBridge.upsert(record) }
+      } else {
+        Log.e("Fail to store script ${it.id} into SQL database.")
       }
-      val values =
-          ContentValues().apply {
-            put("id", it.id)
-            put("code", it.code)
-            put("meta", it.meta)
-            if (it.storage != null) {
-              put("storage", it.storage.toString())
-            }
-          }
-      runCatching { db.insertOrThrow("script", null, values) }
-          .onFailure {
-            Log.e("Fail to store script ${values.getAsString("id")} into SQL database.")
-            Log.ex(it)
-          }
     }
-    dbHelper.close()
+    store.close()
+  }
+
+  fun delete(ids: Array<String>) {
+    if (ids.isEmpty()) return
+    val store = ScriptStore(Chrome.getContext())
+    store.delete(ids)
+    store.close()
+    scripts.removeAll(scripts.filter { ids.contains(it.id) })
+    Chrome.IO.submit { CentralBridge.delete(ids) }
+  }
+
+  fun setEnabled(id: String, enabled: Boolean) {
+    val store = ScriptStore(Chrome.getContext())
+    store.setEnabled(id, enabled)
+    store.close()
+    val index = scripts.indexOfFirst { it.id == id }
+    if (index >= 0) scripts[index] = scripts[index].copy(enabled = enabled)
+    Chrome.IO.submit { CentralBridge.setEnabled(id, enabled) }
+  }
+
+  /** Pull the central database when it is reachable; keep the local list otherwise. */
+  fun refreshFromCentral() {
+    val records = CentralBridge.queryRecords() ?: return
+    val loaded =
+        records.mapNotNull { record ->
+          val existing = scripts.find { it.id == record.id }
+          val parsed =
+              parseScript(record.meta + record.code, record.storage, hydrateRequires = false)
+          if (parsed == null || parsed.id != record.id) {
+            null
+          } else {
+            parsed.copy(
+                enabled = record.enabled,
+                sortOrder = record.sortOrder,
+                customMatch = record.customMatch,
+                customInclude = record.customInclude,
+                customExclude = record.customExclude,
+                customRunAt = record.customRunAt,
+                updateUrl = record.updateUrl,
+                iconUrl = record.iconUrl,
+                lastUpdated = record.lastUpdated,
+                lib = existing?.lib ?: emptyList(),
+            )
+          }
+        }
+    scripts.clear()
+    scripts.addAll(loaded)
+    lastRefresh = System.currentTimeMillis()
+  }
+
+  /**
+   * Cheap throttle for the injection path: the provider is queried at most once every two seconds,
+   * on the IO pool, so a page load never blocks on a binder call.
+   */
+  fun refreshIfStale() {
+    val now = System.currentTimeMillis()
+    if (now - lastRefresh < 2000) return
+    lastRefresh = now
+    Chrome.IO.submit { syncWithCentral() }
+  }
+
+  private fun syncWithCentral() {
+    if (!CentralBridge.isAvailable()) return
+    val prefs = Chrome.getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    if (!prefs.getBoolean(MIGRATED_KEY, false)) {
+      val inserted = CentralBridge.migrate(scripts.map { it.toRecord() })
+      Log.i("Migrated $inserted scripts to the central database")
+      prefs.edit().putBoolean(MIGRATED_KEY, true).apply()
+    }
+    refreshFromCentral()
   }
 
   private fun fixEncoding(url: String, path: String, codes: MutableList<String>) {
@@ -98,6 +163,7 @@ object ScriptDbManager {
   }
 
   fun invokeScript(url: String, webView: Any? = null, frameId: String? = null) {
+    refreshIfStale()
     val codes = mutableListOf<String>(Local.initChromeXt)
     val path = resolveContentUrl(url)
     val webSettings = webView?.invokeMethod { name == "getSettings" }
@@ -166,7 +232,8 @@ object ScriptDbManager {
     if (asyncEvaluation) codes.add(initScript)
     if (runScripts) {
       scripts
-          .filter { matching(it, url) && !(frameId != null && it.noframes) }
+          .filter { it.enabled && matching(it, url) && !(frameId != null && it.noframes) }
+          .sortedBy { it.sortOrder }
           .forEach {
             if (it.grant.contains("frames")) framesGranted = true
             GM.bootstrap(it, codes)
@@ -180,46 +247,43 @@ object ScriptDbManager {
   }
 
   fun updateScriptStorage() {
-    val dbHelper = ScriptDbHelper(Chrome.getContext())
-    val db = dbHelper.writableDatabase
+    val store = ScriptStore(Chrome.getContext())
     scripts.forEach {
       if (it.storage != null) {
-        val values = ContentValues().apply { put("storage", it.storage.toString()) }
-        if (db.update("script", values, "id = ?", arrayOf(it.id)).toString() == "-1") {
-          Log.e("Updating scriptStorage failed for: " + it.id)
+        val json = it.storage.toString()
+        if (store.updateStorage(it.id, json)) {
+          Chrome.IO.submit { CentralBridge.updateStorage(it.id, json) }
         } else {
-          Log.d("ScriptStorage updated for " + it.id)
+          Log.e("Updating scriptStorage failed for: " + it.id)
         }
       }
     }
-    dbHelper.close()
+    store.close()
   }
 
-  private fun query(
-      selection: String? = null,
-      selectionArgs: Array<String>? = null,
-  ): MutableList<Script> {
-    val dbHelper = ScriptDbHelper(Chrome.getContext())
-    val db = dbHelper.readableDatabase
-    val cursor = db.query("script", null, selection, selectionArgs, null, null, null)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-      (cursor as AbstractWindowedCursor).setWindow(CursorWindow("max", 1024 * 1024 * 10.toLong()))
-    }
-    val quried_scripts = mutableListOf<Script>()
-    with(cursor) {
-      while (moveToNext()) {
-        val id = getString(getColumnIndexOrThrow("id"))
-        val meta = getString(getColumnIndexOrThrow("meta"))
-        val code = getString(getColumnIndexOrThrow("code"))
-        val storage = getString(getColumnIndexOrThrow("storage"))
-        val script = parseScript(meta + code, storage)
-        if (script != null && script.id == id) {
-          quried_scripts.add(script)
+  private fun query(): MutableList<Script> {
+    val store = ScriptStore(Chrome.getContext())
+    val records = store.records()
+    store.close()
+    return records
+        .mapNotNull { record ->
+          val parsed = parseScript(record.meta + record.code, record.storage)
+          if (parsed == null || parsed.id != record.id) {
+            null
+          } else {
+            parsed.copy(
+                enabled = record.enabled,
+                sortOrder = record.sortOrder,
+                customMatch = record.customMatch,
+                customInclude = record.customInclude,
+                customExclude = record.customExclude,
+                customRunAt = record.customRunAt,
+                updateUrl = record.updateUrl,
+                iconUrl = record.iconUrl,
+                lastUpdated = record.lastUpdated,
+            )
+          }
         }
-      }
-    }
-    cursor.close()
-    dbHelper.close()
-    return quried_scripts
+        .toMutableList()
   }
 }

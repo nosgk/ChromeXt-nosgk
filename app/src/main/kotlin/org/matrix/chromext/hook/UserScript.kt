@@ -93,7 +93,11 @@ object UserScriptHook : BaseHook() {
         }
 
     findMethod(proxy.chromeTabbedActivity, true) { name == "onResume" }
-        .hookBefore { Chrome.init(it.thisObject as Context) }
+        .hookBefore {
+          Chrome.init(it.thisObject as Context)
+          // Pull changes made in the native manager; the call is throttled and runs on IO.
+          Chrome.IO.submit { ScriptDbManager.refreshFromCentral() }
+        }
 
     // Some browsers declare neither onResume nor onStop on their own activity, both come from the
     // superclass
