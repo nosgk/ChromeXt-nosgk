@@ -1,6 +1,7 @@
 package org.matrix.chromext.devtools
 
 import android.net.LocalSocket
+import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import org.json.JSONArray
 import org.matrix.chromext.utils.Log
@@ -40,7 +41,8 @@ fun hitDevTools(): LocalSocket {
 
 object DevSessions {
   // DevToolClient instances are created and closed from several IO threads.
-  private val clients: MutableSet<DevToolClient> = ConcurrentHashMap.newKeySet()
+  private val clients: MutableSet<DevToolClient> =
+      Collections.newSetFromMap(ConcurrentHashMap<DevToolClient, Boolean>())
 
   fun get(condition: (DevToolClient) -> Boolean): DevToolClient? {
     var cached = clients.find { condition(it) }
