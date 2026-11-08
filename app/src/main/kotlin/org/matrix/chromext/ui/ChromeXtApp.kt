@@ -58,6 +58,16 @@ sealed interface Screen {
 
 private data class Destination(val screen: Screen, val icon: ImageVector, val label: Int)
 
+/** The apps entry stays highlighted while browsing its second-level script screens. */
+private fun isSelected(destination: Screen, current: Screen): Boolean =
+    when (destination) {
+      Screen.Apps -> current is Screen.Apps || current is Screen.List || current is Screen.Edit
+      Screen.List -> current is Screen.List
+      Screen.Settings -> current is Screen.Settings
+      Screen.About -> current is Screen.About
+      is Screen.Edit -> current is Screen.Edit
+    }
+
 private data class Loaded(
     val scripts: List<Script>,
     val hooked: List<HookedApp>,
@@ -262,7 +272,7 @@ fun ChromeXtApp(
         NavigationRail(modifier = Modifier.fillMaxHeight()) {
           destinations.forEach { destination ->
             NavigationRailItem(
-                selected = screen::class == destination.screen::class,
+                selected = isSelected(destination.screen, screen),
                 onClick = { screen = destination.screen },
                 icon = { Icon(destination.icon, contentDescription = null) },
                 label = { Text(stringResource(destination.label)) },
@@ -278,7 +288,7 @@ fun ChromeXtApp(
               NavigationBar {
                 destinations.forEach { destination ->
                   NavigationBarItem(
-                      selected = screen::class == destination.screen::class,
+                      selected = isSelected(destination.screen, screen),
                       onClick = { screen = destination.screen },
                       icon = { Icon(destination.icon, contentDescription = null) },
                       label = { Text(stringResource(destination.label)) },
