@@ -10,7 +10,7 @@ import java.net.URL
 import org.json.JSONArray
 import org.json.JSONObject
 import org.matrix.chromext.Chrome
-import org.matrix.chromext.Listener
+import org.matrix.chromext.action.ActionState
 import org.matrix.chromext.script.Local
 
 class XMLHttpRequest(
@@ -153,7 +153,7 @@ class XMLHttpRequest(
       Chrome.evaluateJavascript(listOf(code), currentTab, frameId)
     }
     if (disconnect) {
-      Listener.xmlhttpRequests.remove(response.getDouble("uuid"))
+      ActionState.xmlhttpRequests.remove(response.getDouble("uuid"))
       connection?.disconnect()
     }
   }

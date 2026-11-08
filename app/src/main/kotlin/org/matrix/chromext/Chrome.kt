@@ -16,6 +16,7 @@ import java.net.HttpCookie
 import java.util.concurrent.Executors
 import org.json.JSONArray
 import org.json.JSONObject
+import org.matrix.chromext.action.ActionState
 import org.matrix.chromext.devtools.DevSessions
 import org.matrix.chromext.devtools.getInspectPages
 import org.matrix.chromext.devtools.hitDevTools
@@ -119,7 +120,7 @@ object Chrome {
         .hookAfter {
           if (it.result != null) {
             val url = urlString.invoke(userRequest.get(it.thisObject)) as String
-            val request = Listener.xmlhttpRequests.values.find { it.url.toString() == url }
+            val request = ActionState.xmlhttpRequests.values.find { it.url.toString() == url }
             if (request == null || request.anonymous) return@hookAfter
             val res = userResponse.get(it.thisObject)
             @Suppress("UNCHECKED_CAST")
