@@ -103,6 +103,10 @@ private fun downloadLib(libUrl: String): String {
     }
   }
   val url = URL(libUrl)
+  val protocol = url.protocol.lowercase()
+  require(protocol == "http" || protocol == "https") {
+    "Unsupported @require scheme: $protocol"
+  }
   val connection = url.openConnection() as HttpURLConnection
   return connection.inputStream.bufferedReader().use { it.readText() }
 }

@@ -2,6 +2,8 @@ package org.matrix.chromext.extension
 
 import java.io.File
 import java.io.FileReader
+import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.URLConnection
@@ -44,10 +46,14 @@ object LocalFiles {
         val request = requestLine.split(" ")
         if (request[0] == "GET" && request[2] == "HTTP/1.1") {
           val name = request[1]
-          val file = File(path + name)
-          if (!file.exists() && name != "/ChromeXt.js") {
+          val root = File(path).canonicalFile
+          val file = File(root, name.removePrefix("/")).canonicalFile
+          val insideRoot = file == root || file.path.startsWith(root.path + File.separator)
+          if (!insideRoot) {
+            connection.outputStream.write("HTTP/1.1 403 Forbidden\r\n\r\n".toByteArray())
+          } else if (!file.exists() && name != "/ChromeXt.js") {
             connection.outputStream.write("HTTP/1.1 404 Not Found\r\n\r\n".toByteArray())
-          } else if (file.isDirectory() || name.contains("..")) {
+          } else if (file.isDirectory()) {
             connection.outputStream.write("HTTP/1.1 403 Forbidden\r\n\r\n".toByteArray())
           } else {
             val data =
@@ -82,7 +88,9 @@ object LocalFiles {
   private fun startServer(id: String) {
     if (extensions.containsKey(id) && !extensions.get(id)!!.has("port")) {
       val server = ServerSocket()
-      server.bind(null)
+      // Debug-only extension server: keep it on the loopback interface instead of every network
+      // interface. The browser reaches it through localhost anyway.
+      server.bind(InetSocketAddress(InetAddress.getLoopbackAddress(), 0))
       val port = server.getLocalPort()
       Log.d("Listening at port ${port} for ${id}")
       Chrome.IO.submit {

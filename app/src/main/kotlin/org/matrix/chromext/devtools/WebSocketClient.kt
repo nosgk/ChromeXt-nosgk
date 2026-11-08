@@ -176,7 +176,7 @@ class WebSocketFrame(msg: String?, opcode: Int = 0x1) {
   }
 
   private fun writeFrame0(os: OutputStream) {
-    val b = mFin or mRsv1 or mRsv2 or mRsv1 or (mOpcode and 0x0F)
+    val b = mFin or mRsv1 or mRsv2 or mRsv3 or (mOpcode and 0x0F)
     os.write(b)
   }
 

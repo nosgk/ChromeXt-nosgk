@@ -25,8 +25,9 @@ class OpenInChrome : Activity() {
     super.onCreate(savedInstanceState)
 
     @Suppress("DEPRECATION") val installedApplications = packageManager.getInstalledApplications(0)
-    val availablePackages =
-        BrowserCatalog.supportedPackages.intersect(installedApplications.map { it.packageName })
+    val installedPackages = installedApplications.map { it.packageName }.toSet()
+    // Keep the catalog order: intersect() returned a set, so the previous .last() was arbitrary.
+    val availablePackages = BrowserCatalog.supportedPackages.filter { it in installedPackages }
     if (availablePackages.size == 0) {
       Log.toast(this, "No supported Chrome installed")
       finish()

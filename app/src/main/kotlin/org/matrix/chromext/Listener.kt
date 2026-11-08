@@ -21,6 +21,7 @@ import java.lang.reflect.Method
 import java.lang.reflect.Modifier
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.ConcurrentHashMap
 import org.json.JSONArray
 import org.json.JSONObject
 import org.matrix.chromext.devtools.DevSessions
@@ -50,14 +51,14 @@ import org.matrix.chromext.utils.parseOrigin
 
 object Listener {
 
-  val xmlhttpRequests = mutableMapOf<Double, XMLHttpRequest>()
+  val xmlhttpRequests: MutableMap<Double, XMLHttpRequest> = ConcurrentHashMap()
   val allowedActions =
       mapOf(
           "userscript" to listOf("block", "installScript"),
           "front-end" to listOf("inspect_pages", "userscript", "extension"),
           "devtools" to listOf("websocket"),
       )
-  val tabNotification = mutableMapOf<Int, Any>()
+  val tabNotification: MutableMap<Int, Any> = ConcurrentHashMap()
 
   private fun syncSharedPreference(
       payload: String,
@@ -552,7 +553,15 @@ private class ScriptNotification(detail: JSONObject, frameId: String?) : Broadca
     fun newIntent(id: String, uuid: Int, frameId: String?): PendingIntent {
       val ctx = Chrome.getContext()
       val detail = JSONObject(mapOf("id" to id, "uuid" to uuid))
-      ctx.registerReceiver(ScriptNotification(detail, frameId), IntentFilter(ACTION_USERSCRIPT))
+      val receiver = ScriptNotification(detail, frameId)
+      val filter = IntentFilter(ACTION_USERSCRIPT)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        // The broadcast is sent through our own PendingIntent; it must not be reachable by other
+        // apps. targetSdk 35 makes the flag mandatory for dynamically registered receivers.
+        ctx.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+      } else {
+        ctx.registerReceiver(receiver, filter)
+      }
       val intent =
           Intent().apply {
             setAction(ACTION_USERSCRIPT)

@@ -6,6 +6,7 @@ import android.database.AbstractWindowedCursor
 import android.database.CursorWindow
 import android.net.Uri
 import android.os.Build
+import java.util.concurrent.CopyOnWriteArrayList
 import org.json.JSONArray
 import org.json.JSONObject
 import org.matrix.chromext.Chrome
@@ -21,7 +22,8 @@ import org.matrix.chromext.utils.shouldBypassSandbox
 
 object ScriptDbManager {
 
-  val scripts = query()
+  // Read from page-injection threads while Listener may add/remove scripts from the UI thread.
+  val scripts: MutableList<Script> = CopyOnWriteArrayList(query())
   val cosmeticFilters: MutableMap<String, String>
   val userAgents: MutableMap<String, String>
   val cspRules: MutableMap<String, String>

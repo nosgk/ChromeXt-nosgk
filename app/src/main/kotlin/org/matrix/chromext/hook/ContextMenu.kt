@@ -23,7 +23,7 @@ import org.matrix.chromext.utils.*
 
 object ContextMenuHook : BaseHook() {
 
-  val erudaMenuId = 31415926
+  val erudaMenuId = 31415927
   private var text: WeakReference<TextView>? = null
 
   private fun openEruda(url: String) {
