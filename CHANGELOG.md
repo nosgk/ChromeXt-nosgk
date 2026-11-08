@@ -7,7 +7,8 @@ All notable changes to this fork are documented here. The format follows [Keep a
 ### Fixed
 
 - Chrome crashing on every page after changing an engine switch and restarting: applying the engine config called `WebView.setWebContentsDebuggingEnabled` inside Chromium browser processes, which initializes the WebView provider there and takes Chrome down. The call is now limited to actual WebView hosts (`WebViewHook.isInit`) and posted to the main thread; the whole config application is also guarded.
-- Scripts installed by the upstream ChromeXt disappearing after reinstalling this module: the one-time migration flag lives in the browser's preferences while the central database is wiped with the module, so migration was skipped forever. The flag key moved to `migrated_to_central_v13` and migration now also runs whenever the central database is empty; the browser database scan additionally probes the standard paths directly as well as with `find`.
+- Scripts installed by the upstream ChromeXt disappearing after reinstalling this module: the one-time migration flag lives in the browser's preferences while the central database is wiped with the module, so migration was skipped forever. The flag key moved to `migrated_to_central_v13` and migration now also runs whenever the central database is empty; local-only scripts stay in the injected list until migration succeeds, and the central list is mirrored back to the browser database (preserving local GM storage) so both sides agree.
+- Browser database scan timing out on Chrome: it walked the entire app data directory (Chrome's `app_chrome` tree has tens of thousands of entries). It now only probes each app's `databases/` directory, and a non-zero `su` exit code or timeout is reported instead of being shown as "not found".
 
 ## [3.14.0] - 2026-11-08
 

@@ -35,6 +35,8 @@ object ScriptDbManager {
   var keepStorage: Boolean
 
   @Volatile private var lastRefresh = 0L
+  @Volatile private var localMirrored = false
+  @Volatile private var canMirror = false
 
   /** Engine switches pulled from the central config table; defaults match pre-3.10 behavior. */
   @Volatile var engine = EngineConfig()
@@ -101,36 +103,68 @@ object ScriptDbManager {
   /** Pull the central database when it is reachable; keep the local list otherwise. */
   fun refreshFromCentral(records: List<ScriptRecord>? = null) {
     val source = records ?: CentralBridge.queryRecords() ?: return
+    val previous = scripts.toList()
     val loaded =
-        source.mapNotNull { record ->
-          val existing = scripts.find { it.id == record.id }
-          val parsed =
-              parseScript(
-                  record.meta + record.code,
-                  record.storage,
-                  hydrateRequires = existing == null,
-              )
-          if (parsed == null || parsed.id != record.id) {
-            null
-          } else {
-            parsed.copy(
-                enabled = record.enabled,
-                sortOrder = record.sortOrder,
-                customMatch = record.customMatch,
-                customInclude = record.customInclude,
-                customExclude = record.customExclude,
-                customRunAt = record.customRunAt,
-                updateUrl = record.updateUrl,
-                iconUrl = record.iconUrl,
-                lastUpdated = record.lastUpdated,
-                apps = parseApps(record.apps),
-                lib = existing?.lib ?: emptyList(),
-            )
-          }
-        }
+        source
+            .mapNotNull { record ->
+              val existing = scripts.find { it.id == record.id }
+              val parsed =
+                  parseScript(
+                      record.meta + record.code,
+                      record.storage,
+                      hydrateRequires = existing == null,
+                  )
+              if (parsed == null || parsed.id != record.id) {
+                null
+              } else {
+                parsed.copy(
+                    enabled = record.enabled,
+                    sortOrder = record.sortOrder,
+                    customMatch = record.customMatch,
+                    customInclude = record.customInclude,
+                    customExclude = record.customExclude,
+                    customRunAt = record.customRunAt,
+                    updateUrl = record.updateUrl,
+                    iconUrl = record.iconUrl,
+                    lastUpdated = record.lastUpdated,
+                    apps = parseApps(record.apps),
+                    lib = existing?.lib ?: emptyList(),
+                )
+              }
+            }
+            .toMutableList()
+    if (!canMirror) {
+      // Migration has not been confirmed yet: keep scripts that only exist in the browser-local
+      // database in the injected list instead of dropping them on the first central refresh.
+      val centralIds = source.mapTo(mutableSetOf()) { it.id }
+      previous.filter { it.id !in centralIds }.forEach { loaded.add(it) }
+    }
     scripts.clear()
     scripts.addAll(loaded)
     lastRefresh = System.currentTimeMillis()
+    if (canMirror && !localMirrored) {
+      // Keep the browser-local database in step with the central one, so the next process start
+      // injects the full list before the first sync and deleted scripts do not linger locally.
+      val mirrored = runCatching { mirrorToLocal(source) }.onFailure { Log.ex(it) }.isSuccess
+      if (mirrored) localMirrored = true
+    }
+  }
+
+  private fun mirrorToLocal(records: List<ScriptRecord>) {
+    val store = ScriptStore(Chrome.getContext())
+    try {
+      val local = store.records().associateBy { it.id }
+      val centralIds = records.mapTo(mutableSetOf()) { it.id }
+      records.forEach { record ->
+        // The browser-local GM storage is the freshest copy; never replace it with the central one.
+        val storage = local[record.id]?.storage ?: record.storage
+        store.upsert(record.copy(storage = storage))
+      }
+      val stale = local.keys.filterNot { it in centralIds }
+      if (stale.isNotEmpty()) store.delete(stale.toTypedArray())
+    } finally {
+      store.close()
+    }
   }
 
   /**
@@ -158,11 +192,16 @@ object ScriptDbManager {
       if (inserted != null) {
         Log.i("Migrated $inserted scripts to the central database")
         prefs.edit().putBoolean(MIGRATED_KEY, true).apply()
+        canMirror = true
         // The snapshot above predates the migration; re-read so the injected list is complete.
         refreshFromCentral()
         return
       }
+      // Migration failed: keep the local-only scripts in memory, but never mirror to local yet.
+      refreshFromCentral(central)
+      return
     }
+    canMirror = true
     refreshFromCentral(central)
   }
 

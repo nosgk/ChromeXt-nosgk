@@ -64,45 +64,51 @@ object ScriptStorage {
   fun scan(databases: List<LocalScriptDatabase>): ScanOutcome {
     if (databases.isEmpty()) return ScanOutcome(databases, rootOk = true)
     val packages = databases.joinToString(" ") { it.packageName }
+    // Only touch each app's `databases/` directory. Walking the whole data directory (Chrome's
+    // app_chrome tree alone has tens of thousands of entries) made this command exceed the timeout
+    // and look like "not found" on every browser.
     val command =
         "users=\$(ls /data/user 2>/dev/null)\n" +
             "for u in \$users; do\n" +
             "  for p in $packages; do\n" +
-            "    for f in /data/user/\$u/\$p/databases/$DB_NAME /data/user_de/\$u/\$p/databases/$DB_NAME; do\n" +
-            "      if [ -f \"\$f\" ]; then\n" +
+            "    for base in /data/user/\$u/\$p /data/user_de/\$u/\$p; do\n" +
+            "      for f in \$base/databases/$DB_NAME \$base/databases/$DB_NAME.db; do\n" +
+            "        if [ -f \"\$f\" ]; then\n" +
+            "          s=\$(stat -c %s \"\$f\" 2>/dev/null || echo 0)\n" +
+            "          t=\$(stat -c %Y \"\$f\" 2>/dev/null || echo 0)\n" +
+            "          echo \"\$f|\$s|\$t\"\n" +
+            "        fi\n" +
+            "      done\n" +
+            "      for f in \$(find \$base/databases -maxdepth 1 -name '$DB_NAME*' 2>/dev/null); do\n" +
             "        s=\$(stat -c %s \"\$f\" 2>/dev/null || echo 0)\n" +
             "        t=\$(stat -c %Y \"\$f\" 2>/dev/null || echo 0)\n" +
             "        echo \"\$f|\$s|\$t\"\n" +
-            "      fi\n" +
-            "    done\n" +
-            "    for f in \$(find /data/user/\$u/\$p /data/user_de/\$u/\$p -maxdepth 3 \\( -name $DB_NAME -o -name $DB_NAME.db \\) 2>/dev/null); do\n" +
-            "      s=\$(stat -c %s \"\$f\" 2>/dev/null || echo 0)\n" +
-            "      t=\$(stat -c %Y \"\$f\" 2>/dev/null || echo 0)\n" +
-            "      echo \"\$f|\$s|\$t\"\n" +
+            "      done\n" +
             "    done\n" +
             "  done\n" +
             "done\n" +
             "for p in $packages; do\n" +
-            "  f=/data/data/\$p/databases/$DB_NAME\n" +
-            "  if [ -f \"\$f\" ]; then\n" +
-            "    s=\$(stat -c %s \"\$f\" 2>/dev/null || echo 0)\n" +
-            "    t=\$(stat -c %Y \"\$f\" 2>/dev/null || echo 0)\n" +
-            "    echo \"\$f|\$s|\$t\"\n" +
-            "  fi\n" +
-            "  for f in \$(find /data/data/\$p -maxdepth 3 \\( -name $DB_NAME -o -name $DB_NAME.db \\) 2>/dev/null); do\n" +
-            "    s=\$(stat -c %s \"\$f\" 2>/dev/null || echo 0)\n" +
-            "    t=\$(stat -c %Y \"\$f\" 2>/dev/null || echo 0)\n" +
-            "    echo \"\$f|\$s|\$t\"\n" +
+            "  for f in /data/data/\$p/databases/$DB_NAME /data/data/\$p/databases/$DB_NAME.db; do\n" +
+            "    if [ -f \"\$f\" ]; then\n" +
+            "      s=\$(stat -c %s \"\$f\" 2>/dev/null || echo 0)\n" +
+            "      t=\$(stat -c %Y \"\$f\" 2>/dev/null || echo 0)\n" +
+            "      echo \"\$f|\$s|\$t\"\n" +
+            "    fi\n" +
             "  done\n" +
             "done"
 
-    val output =
-        runSu(command, 12)
-            ?: return ScanOutcome(
-                databases.map { it.copy(checked = true, exists = false) },
-                rootOk = false,
-                message = "su unavailable",
-            )
+    val result = runSu(command, 15)
+    if (result.timedOut || result.exitCode != 0) {
+      return ScanOutcome(
+          databases.map { it.copy(checked = true, exists = false) },
+          rootOk = false,
+          message =
+              result.output.trim().ifBlank {
+                if (result.timedOut) "su timed out" else "su exit ${result.exitCode}"
+              },
+      )
+    }
+    val output = result.output
     if (output.contains("Permission denied", ignoreCase = true) ||
         output.contains("not allowed", ignoreCase = true) ||
         output.contains("uid=0", ignoreCase = true).not() && output.contains("su:", ignoreCase = true)) {
@@ -230,17 +236,26 @@ object ScriptStorage {
         }
   }
 
-  private fun runSu(command: String, timeoutSeconds: Long): String? =
+  private data class SuResult(
+      val output: String,
+      val exitCode: Int,
+      val timedOut: Boolean,
+  )
+
+  private fun runSu(command: String, timeoutSeconds: Long): SuResult =
       runCatching {
             val process =
                 ProcessBuilder("su", "-c", command).redirectErrorStream(true).start()
             val bytes = process.inputStream.use { it.readBytes() }
             val finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS)
-            if (!finished) process.destroy()
-            if (!finished) return@runCatching null
-            String(bytes, Charsets.UTF_8)
+            if (!finished) {
+              process.destroy()
+              SuResult(String(bytes, Charsets.UTF_8), -1, timedOut = true)
+            } else {
+              SuResult(String(bytes, Charsets.UTF_8), process.exitValue(), timedOut = false)
+            }
           }
-          .getOrNull()
+          .getOrElse { SuResult(it.message ?: "su failed", -1, timedOut = false) }
 
   private fun copyFile(path: String, target: File, requireSqliteHeader: Boolean): Boolean =
       runCatching {
