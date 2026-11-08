@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import org.matrix.chromext.Chrome
 
 /**
  * Launches the manager from either the module process or a hooked browser process. The browser
@@ -32,6 +33,10 @@ object ManagerLauncher {
                 Intent().apply {
                   component = ComponentName(MODULE_PACKAGE, INSTALL_ACTIVITY)
                   putExtra(InstallScriptActivity.EXTRA_SCRIPT, script)
+                  // Installing from a hooked app scopes the script to that app by default.
+                  Chrome.packageName?.let {
+                    putExtra(InstallScriptActivity.EXTRA_PACKAGE, it)
+                  }
                   addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
             context.startActivity(intent)

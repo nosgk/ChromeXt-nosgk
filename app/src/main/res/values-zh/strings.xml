@@ -84,9 +84,9 @@
 	<string name="editor_enabled">启用</string>
 	<string name="editor_run_at">运行时机</string>
 	<string name="run_at_default">默认</string>
-	<string name="run_at_start">文档开始</string>
-	<string name="run_at_end">文档结束</string>
-	<string name="run_at_idle">空闲</string>
+	<string name="run_at_start">文档开始前</string>
+	<string name="run_at_end">DOM 解析完成</string>
+	<string name="run_at_idle">页面加载完成</string>
 	<string name="editor_custom_match">自定义 @match（每行一条）</string>
 	<string name="editor_custom_include">自定义 @include（每行一条）</string>
 	<string name="editor_custom_exclude">自定义 @exclude（每行一条）</string>
@@ -97,6 +97,12 @@
 	<string name="editor_apps_select">选择应用</string>
 	<string name="editor_apps_hint">留空表示所有已 Hook 的应用。</string>
 	<string name="editor_check_update">检查更新</string>
+	<string name="editor_open_code">打开代码编辑器</string>
+	<string name="editor_code_summary">%1$d 行 · %2$d 字符</string>
+	<string name="editor_code_hint">长脚本建议在全屏编辑器中修改，避免本页卡顿</string>
+	<string name="editor_apps_search">搜索应用</string>
+	<string name="editor_apps_empty">当前作用域内没有匹配的应用</string>
+	<string name="editor_apps_scope_unavailable">未能读取 LSPosed 作用域，仅列出已上报的应用</string>
 	<string name="editor_error_storage">GM_storage 不是合法的 JSON</string>
 	<string name="editor_error_metadata">元数据块无效</string>
 	<string name="editor_error_run_at">@run-at 只能是 document-start、document-end 或 document-idle</string>
@@ -164,6 +170,20 @@
 	<string name="install_version_diff">v%1$s → v%2$s</string>
 	<string name="install_error_read">无法读取脚本</string>
 	<string name="install_error_invalid">无效的用户脚本</string>
+	<string name="install_scope_all">在所有已 Hook 应用中运行</string>
+	<string name="install_scope">仅在这些应用运行：%1$s</string>
+
+	<!-- 代码编辑器 -->
+	<string name="code_editor_title">代码编辑器</string>
+	<string name="code_editor_stats">%1$d 行 · %2$d 字符 · 第 %3$d 行 第 %4$d 列</string>
+	<string name="code_editor_find">查找</string>
+	<string name="code_editor_replace">替换为</string>
+	<string name="code_editor_next">下一个</string>
+	<string name="code_editor_replace_one">替换</string>
+	<string name="code_editor_replace_all">全部替换</string>
+	<string name="code_editor_discard_title">放弃修改？</string>
+	<string name="code_editor_discard_body">未保存的代码修改会丢失。</string>
+	<string name="code_editor_discard">放弃</string>
 
 	<!-- 应用工作台 -->
 	<string name="action_refresh">刷新</string>
@@ -171,14 +191,17 @@
 	<string name="apps_filter_hooked">已 Hook</string>
 	<string name="apps_filter_all">全部应用</string>
 	<string name="apps_global">全局脚本</string>
-	<string name="apps_global_hint">在所有已 Hook 的应用中运行</string>
+	<string name="apps_global_hint">全部已安装脚本</string>
 	<string name="apps_script_counts">%1$d 个脚本 · %2$d 启用</string>
 	<string name="apps_status_active">已激活</string>
 	<string name="apps_status_scoped">已勾选，未激活</string>
 	<string name="apps_status_missing">未安装</string>
 	<string name="apps_status_out_of_scope">未加入作用域</string>
-	<string name="apps_scope_unavailable">未能读取 LSPosed 作用域，当前仅显示已上报的应用与已知浏览器。下拉可重试。</string>
-	<string name="scripts_global_title">全局脚本</string>
+	<string name="apps_scope_empty">ChromeXt 在 LSPosed 中的作用域为空，请至少勾选一个应用。</string>
+	<string name="apps_scope_no_root">未获得 root，无法读取 LSPosed 作用域，当前仅显示已上报的应用。</string>
+	<string name="apps_scope_no_config">未在 /data/adb 下找到 LSPosed 的 modules_config.db，当前仅显示已上报的应用。</string>
+	<string name="apps_scope_db_error">读取 LSPosed 作用域失败（%1$s），当前仅显示已上报的应用。</string>
+	<string name="scripts_global_title">全部脚本</string>
 
 	<!-- 设置工作台 -->
 	<string name="settings_telemetry">引擎遥测</string>

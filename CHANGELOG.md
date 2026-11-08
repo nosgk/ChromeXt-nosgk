@@ -2,6 +2,21 @@
 
 All notable changes to this fork are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the module's `versionName`.
 
+## [3.12.0] - 2026-11-08
+
+### Added
+
+- Full-screen code editor: the script editor now shows metadata plus a line/character summary and an "open code editor" button; the editor itself provides monospace input, find/replace, a live line/column indicator and a discard confirmation.
+- The app selector in the script editor has a search field and only lists apps that are actually in the LSPosed scope (falling back to apps that reported in when the scope cannot be read).
+- Installing a script from a hooked app scopes it to that app by default, both in the native install screen and in the direct-install fallback.
+- The LSPosed scope reader now discovers `modules_config.db` under `/data/adb`, copies the `-wal`/`-shm` sidecars, retries two query shapes, and reports `NO_ROOT` / `NO_CONFIG` / `DB_ERROR` / `EMPTY` instead of silently returning an empty scope.
+
+### Changed
+
+- Navigation: the apps page is now the root. The script list is a second-level screen opened by selecting an app (or the "global scripts" row), with a back arrow; the bottom bar is apps/settings/about and becomes a rail on wide screens.
+- The "global scripts" row opens every installed script instead of only scripts without an app scope.
+- `@run-at` labels use precise wording: "before document", "DOM parsed", "page loaded".
+
 ## [3.11.0] - 2026-11-08
 
 ### Added
@@ -111,7 +126,8 @@ All notable changes to this fork are documented here. The format follows [Keep a
 - Support for the MVC page menu design.
 - Loading-state tracking for browsers where `mIsLoading` cannot be located.
 
-[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.11.0...HEAD
+[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.12.0...HEAD
+[3.12.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.12.0
 [3.11.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.11.0
 [3.10.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.10.0
 [3.9.1]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.9.0...v3.9.1

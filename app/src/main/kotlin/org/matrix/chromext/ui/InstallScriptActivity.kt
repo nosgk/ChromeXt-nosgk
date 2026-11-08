@@ -54,12 +54,14 @@ class InstallScriptActivity : ComponentActivity() {
     super.onCreate(savedInstanceState)
     val uri = intent?.data
     val provided = intent?.getStringExtra(EXTRA_SCRIPT)
+    val sourcePackage = intent?.getStringExtra(EXTRA_PACKAGE)
     setContent {
       ChromeXtTheme(ThemePrefs.load(this)) {
         Surface {
           InstallScriptScreen(
               uri = uri,
               provided = provided,
+              sourcePackage = sourcePackage,
               onCancel = { finish() },
               onInstalled = { finish() },
               onEdit = { script ->
@@ -77,6 +79,7 @@ class InstallScriptActivity : ComponentActivity() {
   companion object {
     const val ACTION_INSTALL_SCRIPT = "org.matrix.chromext.ACTION_INSTALL_SCRIPT"
     const val EXTRA_SCRIPT = "script"
+    const val EXTRA_PACKAGE = "source_package"
   }
 }
 
@@ -85,6 +88,7 @@ class InstallScriptActivity : ComponentActivity() {
 private fun InstallScriptScreen(
     uri: Uri?,
     provided: String?,
+    sourcePackage: String?,
     onCancel: () -> Unit,
     onInstalled: () -> Unit,
     onEdit: (Script) -> Unit,
@@ -97,7 +101,12 @@ private fun InstallScriptScreen(
   var text by remember { mutableStateOf(provided) }
   var script by remember { mutableStateOf<Script?>(null) }
   var existingVersion by remember { mutableStateOf<String?>(null) }
+  var existingApps by remember { mutableStateOf<List<String>>(emptyList()) }
   var error by remember { mutableStateOf<Int?>(null) }
+
+  // Installing from a hooked app scopes the script to that app; re-installing keeps the scope the
+  // user already chose.
+  val scopedApps = existingApps.ifEmpty { listOfNotNull(sourcePackage?.takeIf { it.isNotBlank() }) }
 
   LaunchedEffect(uri, provided) {
     if (text == null && uri != null) {
@@ -112,8 +121,9 @@ private fun InstallScriptScreen(
       error = R.string.install_error_invalid
     } else {
       script = parsed
-      existingVersion =
-          withContext(Dispatchers.IO) { repository.load().find { it.id == parsed.id }?.version }
+      val existing = withContext(Dispatchers.IO) { repository.load().find { it.id == parsed.id } }
+      existingVersion = existing?.version
+      existingApps = existing?.apps ?: emptyList()
     }
   }
 
@@ -153,6 +163,12 @@ private fun InstallScriptScreen(
           )
         }
         if (current.description.isNotBlank()) Text(current.description)
+        Text(
+            if (scopedApps.isEmpty()) stringResource(R.string.install_scope_all)
+            else stringResource(R.string.install_scope, scopedApps.joinToString(", ")),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Text(stringResource(R.string.install_target_sites), style = MaterialTheme.typography.titleSmall)
         current.match.forEach { Text(it, style = MaterialTheme.typography.bodySmall) }
         Text(stringResource(R.string.install_permissions), style = MaterialTheme.typography.titleSmall)
@@ -176,7 +192,8 @@ private fun InstallScriptScreen(
           }
           OutlinedButton(
               onClick = {
-                val updated = current.copy(lastUpdated = System.currentTimeMillis())
+                val updated =
+                    current.copy(apps = scopedApps, lastUpdated = System.currentTimeMillis())
                 scope.launch {
                   withContext(Dispatchers.IO) { repository.save(updated) }
                   onEdit(updated)
@@ -188,7 +205,8 @@ private fun InstallScriptScreen(
           }
           Button(
               onClick = {
-                val updated = current.copy(lastUpdated = System.currentTimeMillis())
+                val updated =
+                    current.copy(apps = scopedApps, lastUpdated = System.currentTimeMillis())
                 scope.launch {
                   withContext(Dispatchers.IO) { repository.save(updated) }
                   onInstalled()

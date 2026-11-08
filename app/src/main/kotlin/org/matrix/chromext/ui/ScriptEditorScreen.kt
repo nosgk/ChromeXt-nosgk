@@ -13,8 +13,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -64,6 +67,7 @@ fun ScriptEditorScreen(
     modifier: Modifier,
     script: Script,
     knownApps: List<AppEntry>,
+    scopeAvailable: Boolean,
     onCancel: () -> Unit,
     onSave: (Script) -> Unit,
 ) {
@@ -85,6 +89,8 @@ fun ScriptEditorScreen(
   }
   var error by remember(script.id) { mutableStateOf<String?>(null) }
   var showAppsDialog by remember(script.id) { mutableStateOf(false) }
+  var showCodeEditor by remember(script.id) { mutableStateOf(false) }
+  var appQuery by remember(script.id) { mutableStateOf("") }
   var checkingUpdate by remember(script.id) { mutableStateOf(false) }
   var updateInfo by remember(script.id) { mutableStateOf<UpdateInfo?>(null) }
   var pendingRemote by remember(script.id) { mutableStateOf<Script?>(null) }
@@ -180,13 +186,34 @@ fun ScriptEditorScreen(
                   textStyle = MONOSPACE,
                   modifier = Modifier.fillMaxWidth().weight(1f),
               )
-              OutlinedTextField(
-                  value = code,
-                  onValueChange = { code = it },
-                  label = { Text(stringResource(R.string.editor_code)) },
-                  textStyle = MONOSPACE,
-                  modifier = Modifier.fillMaxWidth().weight(2f).padding(top = 8.dp),
-              )
+              Card(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                  Text(
+                      stringResource(R.string.editor_code),
+                      style = MaterialTheme.typography.titleSmall,
+                  )
+                  Text(
+                      stringResource(
+                          R.string.editor_code_summary,
+                          code.count { it == '\n' } + 1,
+                          code.length),
+                      style = MaterialTheme.typography.bodySmall,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  )
+                  Text(
+                      stringResource(R.string.editor_code_hint),
+                      style = MaterialTheme.typography.labelSmall,
+                      color = MaterialTheme.colorScheme.onSurfaceVariant,
+                      modifier = Modifier.padding(top = 4.dp),
+                  )
+                  Button(
+                      onClick = { showCodeEditor = true },
+                      modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                  ) {
+                    Text(stringResource(R.string.editor_open_code))
+                  }
+                }
+              }
             }
         1 ->
             Column(
@@ -260,7 +287,11 @@ fun ScriptEditorScreen(
                   style = MaterialTheme.typography.bodyMedium,
               )
               Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { showAppsDialog = true }) {
+                TextButton(
+                    onClick = {
+                      appQuery = ""
+                      showAppsDialog = true
+                    }) {
                   Text(stringResource(R.string.editor_apps_select))
                 }
                 TextButton(onClick = { apps = emptyList() }) {
@@ -268,9 +299,13 @@ fun ScriptEditorScreen(
                 }
               }
               Text(
-                  stringResource(R.string.editor_apps_hint),
+                  stringResource(
+                      if (scopeAvailable) R.string.editor_apps_hint
+                      else R.string.editor_apps_scope_unavailable),
                   style = MaterialTheme.typography.bodySmall,
-                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+                  color =
+                      if (scopeAvailable) MaterialTheme.colorScheme.onSurfaceVariant
+                      else MaterialTheme.colorScheme.error,
               )
               TextButton(
                   enabled = !checkingUpdate,
@@ -317,44 +352,85 @@ fun ScriptEditorScreen(
   }
 
   if (showAppsDialog) {
+    val needle = appQuery.trim().lowercase()
+    val candidates =
+        (
+                apps
+                    .filter { packageName ->
+                      knownApps.none { it.packageName == packageName }
+                    }
+                    .map { AppEntry(it, it, "", null, false, false, false) } + knownApps)
+            .distinctBy { it.packageName }
+            .filter {
+              needle.isEmpty() ||
+                  it.label.lowercase().contains(needle) ||
+                  it.packageName.lowercase().contains(needle)
+            }
     AlertDialog(
         onDismissRequest = { showAppsDialog = false },
         title = { Text(stringResource(R.string.editor_apps_select)) },
         text = {
-          Column(
-              modifier =
-                  Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
-          ) {
-            knownApps.forEach { app ->
-              Row(
-                  modifier =
-                      Modifier.fillMaxWidth()
-                          .clickable {
-                            apps =
-                                if (apps.contains(app.packageName)) {
-                                  apps - app.packageName
-                                } else {
-                                  apps + app.packageName
-                                }
-                          }
-                          .padding(vertical = 4.dp),
-                  verticalAlignment = Alignment.CenterVertically,
-              ) {
-                Checkbox(
-                    checked = apps.contains(app.packageName),
-                    onCheckedChange = {
-                      apps =
-                          if (apps.contains(app.packageName)) apps - app.packageName
-                          else apps + app.packageName
-                    },
+          Column {
+            OutlinedTextField(
+                value = appQuery,
+                onValueChange = { appQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                placeholder = { Text(stringResource(R.string.editor_apps_search)) },
+            )
+            if (!scopeAvailable) {
+              Text(
+                  stringResource(R.string.editor_apps_scope_unavailable),
+                  style = MaterialTheme.typography.labelSmall,
+                  color = MaterialTheme.colorScheme.error,
+                  modifier = Modifier.padding(top = 4.dp),
+              )
+            }
+            Column(
+                modifier =
+                    Modifier.heightIn(max = 380.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(top = 4.dp),
+            ) {
+              if (candidates.isEmpty()) {
+                Text(
+                    stringResource(R.string.editor_apps_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Column {
-                  Text(app.label)
-                  Text(
-                      app.packageName,
-                      style = MaterialTheme.typography.bodySmall,
-                      color = MaterialTheme.colorScheme.onSurfaceVariant,
+              }
+              candidates.forEach { app ->
+                Row(
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .clickable {
+                              apps =
+                                  if (apps.contains(app.packageName)) {
+                                    apps - app.packageName
+                                  } else {
+                                    apps + app.packageName
+                                  }
+                            }
+                            .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                  Checkbox(
+                      checked = apps.contains(app.packageName),
+                      onCheckedChange = {
+                        apps =
+                            if (apps.contains(app.packageName)) apps - app.packageName
+                            else apps + app.packageName
+                      },
                   )
+                  Column {
+                    Text(app.label)
+                    Text(
+                        app.packageName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                  }
                 }
               }
             }
@@ -405,6 +481,17 @@ fun ScriptEditorScreen(
           TextButton(onClick = { pendingRemote = null }) {
             Text(stringResource(R.string.action_cancel))
           }
+        },
+    )
+  }
+
+  if (showCodeEditor) {
+    CodeEditorDialog(
+        initial = code,
+        onDismiss = { showCodeEditor = false },
+        onApply = {
+          code = it
+          showCodeEditor = false
         },
     )
   }

@@ -28,7 +28,8 @@ object ScriptActions : ActionGroup {
                     val existing = ScriptDbManager.scripts.find { it.id == script.id }
                     val toInsert =
                         if (existing == null) {
-                          script
+                          // Installed from this app: scope it here instead of enabling it globally.
+                          script.copy(apps = listOfNotNull(Chrome.packageName))
                         } else {
                           // Re-installing keeps the user's enable state, ordering and overrides.
                           script.copy(

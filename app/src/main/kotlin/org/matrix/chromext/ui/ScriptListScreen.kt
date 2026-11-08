@@ -29,6 +29,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
@@ -104,10 +105,10 @@ fun ScriptListScreen(
     activeUrl: String?,
     appFilter: String?,
     appLabel: String?,
-    globalOnly: Boolean,
     defaultApps: List<String>,
     updates: Map<String, UpdateInfo>,
     checkingUpdates: Boolean,
+    onBack: () -> Unit,
     onClearAppFilter: () -> Unit,
     onToggle: (String, Boolean) -> Unit,
     onDelete: (Script) -> Unit,
@@ -154,12 +155,10 @@ fun ScriptListScreen(
     }
   }
 
-  val visible = remember(
-      scripts, searchBlobs, debouncedQuery, filter, sort, appFilter, globalOnly, activeUrl) {
+  val visible = remember(scripts, searchBlobs, debouncedQuery, filter, sort, appFilter, activeUrl) {
     val needle = debouncedQuery.trim().lowercase()
     scripts
         .asSequence()
-        .filter { !globalOnly || it.apps.isEmpty() }
         .filter { appFilter == null || it.appliesTo(appFilter) }
         .filter { needle.isEmpty() || searchBlobs[it.id]?.contains(needle) == true }
         .filter {
@@ -179,13 +178,11 @@ fun ScriptListScreen(
         .toList()
   }
 
-  val enabledCount = scripts.count { it.enabled }
   val title =
-      when {
-        globalOnly -> stringResource(R.string.scripts_global_title)
-        appFilter != null && appLabel != null ->
-            stringResource(R.string.apps_filter_title, appLabel)
-        else -> stringResource(R.string.scripts_title, enabledCount, scripts.size)
+      if (appFilter != null && appLabel != null) {
+        stringResource(R.string.apps_filter_title, appLabel)
+      } else {
+        stringResource(R.string.scripts_global_title)
       }
 
   val importLauncher =
@@ -220,6 +217,13 @@ fun ScriptListScreen(
         Column {
           TopAppBar(
               title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+              navigationIcon = {
+                IconButton(onClick = onBack) {
+                  Icon(
+                      Icons.Default.ArrowBack,
+                      contentDescription = stringResource(R.string.action_back))
+                }
+              },
               actions = {
                 IconButton(onClick = onCheckUpdates, enabled = !checkingUpdates) {
                   if (checkingUpdates) {
@@ -232,24 +236,7 @@ fun ScriptListScreen(
                 }
               },
           )
-          if (globalOnly) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-              AssistChip(
-                  onClick = onClearAppFilter,
-                  label = { Text(stringResource(R.string.scripts_global_title)) },
-                  trailingIcon = {
-                    Icon(
-                        Icons.Default.Clear,
-                        contentDescription = stringResource(R.string.empty_clear_filters),
-                        modifier = Modifier.size(16.dp),
-                    )
-                  },
-              )
-            }
-          } else if (appFilter != null && appLabel != null) {
+          if (appFilter != null && appLabel != null) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -389,7 +376,7 @@ fun ScriptListScreen(
                 onAction = {
                   query = ""
                   filter = ScriptFilter.ALL
-                  if (appFilter != null || globalOnly) onClearAppFilter()
+                  if (appFilter != null) onClearAppFilter()
                 },
             )
         else ->

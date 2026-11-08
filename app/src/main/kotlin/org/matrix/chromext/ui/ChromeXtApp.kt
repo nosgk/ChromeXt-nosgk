@@ -1,6 +1,5 @@
 package org.matrix.chromext.ui
 
-import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -51,14 +49,21 @@ import org.matrix.chromext.script.HookedApp
 import org.matrix.chromext.script.Script
 
 sealed interface Screen {
-  data object List : Screen
   data object Apps : Screen
+  data object List : Screen
   data object Settings : Screen
   data object About : Screen
   data class Edit(val script: Script) : Screen
 }
 
 private data class Destination(val screen: Screen, val icon: ImageVector, val label: Int)
+
+private data class Loaded(
+    val scripts: List<Script>,
+    val hooked: List<HookedApp>,
+    val apps: List<AppEntry>,
+    val scope: ScopeResult,
+)
 
 @Composable
 fun ChromeXtApp(
@@ -76,14 +81,13 @@ fun ChromeXtApp(
   var scripts by remember { mutableStateOf<List<Script>>(emptyList()) }
   var hookedApps by remember { mutableStateOf<List<HookedApp>>(emptyList()) }
   var apps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
-  var scopeAvailable by remember { mutableStateOf(false) }
+  var scopeResult by remember { mutableStateOf(ScopeResult()) }
   var includeAllApps by rememberSaveable { mutableStateOf(false) }
   var loading by remember { mutableStateOf(true) }
   var refreshing by remember { mutableStateOf(false) }
   var loadError by remember { mutableStateOf(false) }
-  var screen by remember { mutableStateOf<Screen>(Screen.List) }
+  var screen by remember { mutableStateOf<Screen>(Screen.Apps) }
   var appFilter by rememberSaveable { mutableStateOf<String?>(null) }
-  var globalOnly by rememberSaveable { mutableStateOf(false) }
   var reload by remember { mutableIntStateOf(0) }
   var updates by remember { mutableStateOf<Map<String, UpdateInfo>>(emptyMap()) }
   var checkingUpdates by remember { mutableStateOf(false) }
@@ -101,18 +105,21 @@ fun ChromeXtApp(
           runCatching {
             val loadedScripts = repository.load()
             val loadedHooked = repository.hookedApps()
-            val loadedApps = loadApps(context, loadedHooked, loadedScripts)
-            val scopeRead = runCatching { LsposedScope.read(context) }.getOrDefault(emptySet())
-            Triple(loadedScripts, loadedHooked, loadedApps) to scopeRead
+            val scopeRead = LsposedScope.read(context)
+            Loaded(
+                scripts = loadedScripts,
+                hooked = loadedHooked,
+                apps = loadApps(context, loadedHooked, loadedScripts, scopeRead.packages),
+                scope = scopeRead,
+            )
           }
         }
     loaded
-        .onSuccess { (payload, scopeRead) ->
-          val (loadedScripts, loadedHooked, loadedApps) = payload
-          scripts = loadedScripts
-          hookedApps = loadedHooked
-          apps = loadedApps
-          scopeAvailable = scopeRead.isNotEmpty()
+        .onSuccess {
+          scripts = it.scripts
+          hookedApps = it.hooked
+          apps = it.apps
+          scopeResult = it.scope
         }
         .onFailure { loadError = true }
     loading = false
@@ -189,8 +196,7 @@ fun ChromeXtApp(
   fun applyUpdate(script: Script, info: UpdateInfo) {
     val remote = info.remote ?: return
     scope.launch {
-      val keepStorage =
-          withContext(Dispatchers.IO) { repository.engineConfig().keepStorage }
+      val keepStorage = withContext(Dispatchers.IO) { repository.engineConfig().keepStorage }
       // Preserve everything the user configured locally; only meta/code/version come from the
       // downloaded script.
       val merged =
@@ -220,9 +226,14 @@ fun ChromeXtApp(
     }
   }
 
-  val knownApps = remember(apps) {
+  // The selector only offers apps that are actually in the framework scope; when the scope cannot
+  // be read, fall back to apps that reported in so the list is still usable.
+  val knownApps = remember(apps, scopeResult) {
+    val allowed =
+        if (scopeResult.status == ScopeStatus.OK) scopeResult.packages
+        else apps.filter { it.active }.map { it.packageName }.toSet()
     apps
-        .filter { it.installed }
+        .filter { it.installed && (allowed.isEmpty() || it.packageName in allowed) }
         .map { AppEntry(it.packageName, it.label, it.versionName, null, false, true, false) }
         .distinctBy { it.packageName }
         .sortedBy { it.label.lowercase() }
@@ -233,11 +244,12 @@ fun ChromeXtApp(
         apps.firstOrNull { it.packageName == packageName }?.label ?: packageName
       }
 
-  BackHandler(enabled = screen !is Screen.List) { screen = Screen.List }
+  BackHandler(enabled = screen !is Screen.Apps) {
+    screen = if (screen is Screen.Edit) Screen.List else Screen.Apps
+  }
 
   val destinations =
       listOf(
-          Destination(Screen.List, Icons.Default.List, R.string.nav_scripts),
           Destination(Screen.Apps, Icons.Default.Build, R.string.nav_apps),
           Destination(Screen.Settings, Icons.Default.Settings, R.string.nav_settings),
           Destination(Screen.About, Icons.Default.Info, R.string.nav_about),
@@ -251,13 +263,7 @@ fun ChromeXtApp(
           destinations.forEach { destination ->
             NavigationRailItem(
                 selected = screen::class == destination.screen::class,
-                onClick = {
-                  if (destination.screen is Screen.List) {
-                    globalOnly = false
-                    appFilter = null
-                  }
-                  screen = destination.screen
-                },
+                onClick = { screen = destination.screen },
                 icon = { Icon(destination.icon, contentDescription = null) },
                 label = { Text(stringResource(destination.label)) },
             )
@@ -273,13 +279,7 @@ fun ChromeXtApp(
                 destinations.forEach { destination ->
                   NavigationBarItem(
                       selected = screen::class == destination.screen::class,
-                      onClick = {
-                        if (destination.screen is Screen.List) {
-                          globalOnly = false
-                          appFilter = null
-                        }
-                        screen = destination.screen
-                      },
+                      onClick = { screen = destination.screen },
                       icon = { Icon(destination.icon, contentDescription = null) },
                       label = { Text(stringResource(destination.label)) },
                   )
@@ -290,6 +290,22 @@ fun ChromeXtApp(
       ) { padding ->
         Crossfade(targetState = screen, animationSpec = tween(180), label = "screen") { current ->
           when (current) {
+            Screen.Apps ->
+                AppsScreen(
+                    modifier = Modifier.padding(padding),
+                    apps = apps,
+                    scripts = scripts,
+                    loading = loading,
+                    refreshing = refreshing,
+                    includeAll = includeAllApps,
+                    scopeResult = scopeResult,
+                    onRefresh = { refresh() },
+                    onIncludeAllChange = { includeAllApps = it },
+                    onOpenApp = { packageName ->
+                      appFilter = packageName
+                      screen = Screen.List
+                    },
+                )
             Screen.List ->
                 ScriptListScreen(
                     modifier = Modifier.padding(padding),
@@ -300,14 +316,11 @@ fun ChromeXtApp(
                     activeUrl = activeUrl,
                     appFilter = appFilter,
                     appLabel = appLabel,
-                    globalOnly = globalOnly,
                     defaultApps = appFilter?.let { listOf(it) } ?: emptyList(),
                     updates = updates,
                     checkingUpdates = checkingUpdates,
-                    onClearAppFilter = {
-                      appFilter = null
-                      globalOnly = false
-                    },
+                    onBack = { screen = Screen.Apps },
+                    onClearAppFilter = { appFilter = null },
                     onToggle = { id, enabled -> toggle(id, enabled) },
                     onDelete = { delete(it) },
                     onEdit = { screen = Screen.Edit(it) },
@@ -318,23 +331,6 @@ fun ChromeXtApp(
                     onApplyUpdate = { script, info -> applyUpdate(script, info) },
                     onRetry = { refresh() },
                     onRefresh = { refresh() },
-                )
-            Screen.Apps ->
-                AppsScreen(
-                    modifier = Modifier.padding(padding),
-                    apps = apps,
-                    scripts = scripts,
-                    loading = loading,
-                    refreshing = refreshing,
-                    includeAll = includeAllApps,
-                    scopeAvailable = scopeAvailable,
-                    onRefresh = { refresh() },
-                    onIncludeAllChange = { includeAllApps = it },
-                    onOpenApp = { packageName ->
-                      globalOnly = packageName == null
-                      appFilter = packageName
-                      screen = Screen.List
-                    },
                 )
             Screen.Settings ->
                 SettingsScreen(
@@ -351,6 +347,7 @@ fun ChromeXtApp(
                     modifier = Modifier.padding(padding),
                     script = current.script,
                     knownApps = knownApps,
+                    scopeAvailable = scopeResult.status == ScopeStatus.OK,
                     onCancel = { screen = Screen.List },
                     onSave = { updated ->
                       val originalId = current.script.id.takeIf { id -> scripts.any { it.id == id } }

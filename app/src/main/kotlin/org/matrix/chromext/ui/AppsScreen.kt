@@ -77,10 +77,14 @@ data class AppEntry(
  * scoping), plus packages that reported in, are in the framework scope, or are referenced by a
  * script.
  */
-fun loadApps(context: Context, hooked: List<HookedApp>, scripts: List<Script>): List<AppEntry> {
+fun loadApps(
+    context: Context,
+    hooked: List<HookedApp>,
+    scripts: List<Script>,
+    scoped: Set<String>,
+): List<AppEntry> {
   val packageManager = context.packageManager
   val active = hooked.associateBy { it.packageName }
-  val scoped = runCatching { LsposedScope.read(context) }.getOrDefault(emptySet())
   val scriptScopes = scripts.flatMap { it.apps }.toSet()
 
   val packages = LinkedHashSet<String>()
@@ -138,7 +142,7 @@ fun AppsScreen(
     loading: Boolean,
     refreshing: Boolean,
     includeAll: Boolean,
-    scopeAvailable: Boolean,
+    scopeResult: ScopeResult,
     onRefresh: () -> Unit,
     onIncludeAllChange: (Boolean) -> Unit,
     onOpenApp: (String?) -> Unit,
@@ -166,7 +170,7 @@ fun AppsScreen(
         .toList()
   }
 
-  val globalScripts = remember(scripts) { scripts.filter { it.apps.isEmpty() } }
+  val globalScripts = remember(scripts) { scripts }
   val globalEnabled = globalScripts.count { it.enabled }
 
   Scaffold(
@@ -248,12 +252,15 @@ fun AppsScreen(
                     onClick = { onOpenApp(null) },
                 )
               }
-              if (!scopeAvailable) {
+              if (scopeResult.status != ScopeStatus.OK) {
                 item(key = "scope-hint") {
                   Text(
-                      stringResource(R.string.apps_scope_unavailable),
+                      scopeHint(scopeResult),
                       style = MaterialTheme.typography.bodySmall,
-                      color = MaterialTheme.colorScheme.onSurfaceVariant,
+                      color =
+                          if (scopeResult.status == ScopeStatus.EMPTY)
+                              MaterialTheme.colorScheme.onSurfaceVariant
+                          else MaterialTheme.colorScheme.error,
                       modifier = Modifier.padding(horizontal = 4.dp),
                   )
                 }
@@ -382,6 +389,19 @@ private fun AppRow(app: AppEntry, total: Int, enabled: Int, onClick: () -> Unit)
     }
   }
 }
+
+@Composable
+private fun scopeHint(result: ScopeResult): String =
+    when (result.status) {
+      ScopeStatus.OK -> ""
+      ScopeStatus.EMPTY -> stringResource(R.string.apps_scope_empty)
+      ScopeStatus.NO_ROOT -> stringResource(R.string.apps_scope_no_root)
+      ScopeStatus.NO_CONFIG -> stringResource(R.string.apps_scope_no_config)
+      ScopeStatus.DB_ERROR ->
+          stringResource(
+              R.string.apps_scope_db_error,
+              result.detail.ifBlank { stringResource(R.string.apps_unknown) })
+    }
 
 private fun Drawable.toIconBitmap(size: Int): Bitmap {
   if (this is BitmapDrawable && bitmap != null) {
