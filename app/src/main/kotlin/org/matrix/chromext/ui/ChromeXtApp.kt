@@ -384,6 +384,7 @@ fun ChromeXtApp(
                     onThemeModeChange = onThemeModeChange,
                     onChanged = { reload += 1 },
                     onMessage = { showMessage(it) },
+                    scopePackages = scopeResult.packages,
                 )
             Screen.About -> AboutScreen(modifier = Modifier.padding(padding))
             is Screen.Edit ->

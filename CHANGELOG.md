@@ -2,6 +2,16 @@
 
 All notable changes to this fork are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the module's `versionName`.
 
+## [3.15.7] - 2026-11-09
+
+### Added
+
+- The “已安装宿主” card now lists hooked WebView hosts outside the browser catalog (for example 学习通). It merges the packages recorded in `hooked_app` with the framework scope, so an app the module was injected into appears even though it is not one of the known Chromium browsers. Only catalog browsers still contribute entries to the local-database import card.
+
+### Removed
+
+- The 3.15.4–3.15.6 diagnostics logging feature (verbose switch, module log file, provider log sink and extra probes) is reverted: it never produced a usable log on a scoped WebView host. The provider caller check and `Log` gating are back to their 3.15.3 behavior.
+
 ## [3.15.3] - 2026-11-09
 
 ### Fixed

@@ -68,6 +68,7 @@ import org.matrix.chromext.BuildConfig
 import org.matrix.chromext.R
 import org.matrix.chromext.browser.BrowserCatalog
 import org.matrix.chromext.script.EngineConfig
+import org.matrix.chromext.script.HookedApp
 import org.matrix.chromext.script.LegacyReadResult
 import org.matrix.chromext.script.ScriptDbHelper
 import org.matrix.chromext.script.ScriptFiles
@@ -95,6 +96,8 @@ private data class BrowserInfo(
     val versionName: String,
     val icon: ImageBitmap?,
     val installed: Boolean,
+    /** Catalog browsers also own an upstream `userscript` database the import card can scan. */
+    val catalog: Boolean = true,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -106,6 +109,8 @@ fun SettingsScreen(
     onThemeModeChange: (ThemeMode) -> Unit,
     onChanged: () -> Unit,
     onMessage: (String) -> Unit,
+    /** Packages in the framework scope; scoped WebView hosts outside the catalog show up here. */
+    scopePackages: Set<String> = emptySet(),
 ) {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
@@ -173,15 +178,18 @@ fun SettingsScreen(
 
   LaunchedEffect(Unit) { loadTelemetry() }
 
-  LaunchedEffect(showAllTargets) {
-    browsers = withContext(Dispatchers.IO) { loadBrowsers(context, showAllTargets) }
+  LaunchedEffect(showAllTargets, scopePackages) {
+    browsers =
+        withContext(Dispatchers.IO) {
+          loadBrowsers(context, showAllTargets, repository.hookedApps(), scopePackages)
+        }
   }
 
   LaunchedEffect(browsers) {
     if (storageDatabases.isEmpty()) {
       storageDatabases =
           ScriptStorage.expected(
-              browsers.filter { it.installed }.map { it.packageName to it.label })
+              browsers.filter { it.installed && it.catalog }.map { it.packageName to it.label })
     }
   }
 
@@ -948,10 +956,16 @@ private fun DataCard(
   }
 }
 
-private fun loadBrowsers(context: Context, includeMissing: Boolean): List<BrowserInfo> {
+private fun loadBrowsers(
+    context: Context,
+    includeMissing: Boolean,
+    hooked: List<HookedApp>,
+    scopePackages: Set<String>,
+): List<BrowserInfo> {
   val packageManager = context.packageManager
-  return BrowserCatalog.supportedPackages
-      .mapNotNull { packageName ->
+  val catalog = BrowserCatalog.supportedPackages.toSet()
+  val browsers =
+      BrowserCatalog.supportedPackages.mapNotNull { packageName ->
         val info = runCatching { packageManager.getApplicationInfo(packageName, 0) }.getOrNull()
         if (info == null && !includeMissing) return@mapNotNull null
         val label =
@@ -975,10 +989,46 @@ private fun loadBrowsers(context: Context, includeMissing: Boolean): List<Browse
             versionName = version,
             icon = icon,
             installed = info != null,
+            catalog = true,
         )
       }
-      .sortedWith(
-          compareByDescending<BrowserInfo> { it.installed }.thenBy { it.label.lowercase() })
+  // Scoped WebView hosts outside the browser catalog (a learning app, for example) never appear in
+  // BrowserCatalog, so this card used to hide an app the module had already been injected into.
+  // Merge the packages that reported in with the framework scope, preferring the reported label.
+  val hookedByPackage = hooked.associateBy { it.packageName }
+  val extraPackages =
+      (hooked.map { it.packageName } + scopePackages).toSet() - catalog - context.packageName
+  val extra =
+      extraPackages.mapNotNull { packageName ->
+        val info =
+            runCatching { packageManager.getApplicationInfo(packageName, 0) }.getOrNull()
+                ?: return@mapNotNull null
+        val row = hookedByPackage[packageName]
+        val label =
+            row?.label?.takeIf { it.isNotBlank() }
+                ?: runCatching { packageManager.getApplicationLabel(info).toString() }.getOrNull()
+                ?: packageName
+        val version =
+            row?.versionName?.takeIf { it.isNotBlank() }
+                ?: runCatching { packageManager.getPackageInfo(packageName, 0).versionName }
+                    .getOrNull()
+                    .orEmpty()
+        val icon =
+            runCatching {
+                  packageManager.getApplicationIcon(info).toBrowserIconBitmap(64).asImageBitmap()
+                }
+                .getOrNull()
+        BrowserInfo(
+            packageName = packageName,
+            label = label,
+            versionName = version,
+            icon = icon,
+            installed = true,
+            catalog = false,
+        )
+      }
+  return (browsers + extra)
+      .sortedWith(compareByDescending<BrowserInfo> { it.installed }.thenBy { it.label.lowercase() })
 }
 
 private fun countOrphanStorage(repository: ScriptRepository): Int {
