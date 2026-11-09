@@ -57,6 +57,27 @@ object ManagerLauncher {
           .getOrDefault(false)
 
   /**
+   * Fallback for when the provider cannot stage a payload (module process unreachable): pass a
+   * small script through the Intent. Large scripts must use [installScript] because a Bundle
+   * transaction is limited to ~1 MB.
+   */
+  fun installScriptWithText(context: Context, script: String): Boolean =
+      runCatching {
+            val intent =
+                Intent().apply {
+                  component = ComponentName(MODULE_PACKAGE, INSTALL_ACTIVITY)
+                  putExtra(InstallScriptActivity.EXTRA_SCRIPT, script)
+                  Chrome.packageName?.let {
+                    putExtra(InstallScriptActivity.EXTRA_PACKAGE, it)
+                  }
+                  addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            context.startActivity(intent)
+            true
+          }
+          .getOrDefault(false)
+
+  /**
    * Posts a notification that opens the install confirmation screen. OEM background-activity
    * limits can silently swallow a direct `startActivity`; a tap on the notification always starts
    * the activity from a user gesture.

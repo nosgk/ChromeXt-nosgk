@@ -48,6 +48,7 @@ object ScriptDbManager {
   @Volatile private var lastRevisionCheck = 0L
   @Volatile private var cachedRevision = -1L
   @Volatile private var lastActivationFlush = 0L
+  @Volatile private var lastHookedReport = 0L
 
   private val pendingActivations = ConcurrentHashMap<String, Long>()
   private val hydrationAttempts = ConcurrentHashMap<String, Long>()
@@ -150,6 +151,11 @@ object ScriptDbManager {
   }
 
   private fun syncWithCentral() {
+    // The provider accepts catalog browsers and packages reported in `hooked_app`. A Chromium or
+    // WebView host outside the catalog may have lost its startup report (module process not
+    // running yet), which made staging/installs fail; retry the report before the availability
+    // check, since reportHookedApp is handled before the caller check.
+    reportHookedOnce()
     if (!CentralBridge.isAvailable()) {
       providerReady = false
       return
@@ -161,6 +167,25 @@ object ScriptDbManager {
     cachedRevision = CentralBridge.revision() ?: cachedRevision
     refreshFromCentral(central)
     hydrateMissingRequires(central)
+  }
+
+  private fun reportHookedOnce() {
+    val now = System.currentTimeMillis()
+    if (now - lastHookedReport < 10 * 60_000) return
+    val ctx = runCatching { Chrome.getContext() }.getOrNull() ?: return
+    val packageName =
+        Chrome.packageName ?: runCatching { ctx.packageName }.getOrNull() ?: return
+    val ok =
+        runCatching {
+              val pm = ctx.packageManager
+              val info = pm.getApplicationInfo(packageName, 0)
+              CentralBridge.reportHookedApp(
+                  packageName, pm.getApplicationLabel(info).toString(), Chrome.version ?: "")
+            }
+            .getOrDefault(false)
+    // Only remember a successful report; a provider that was not running yet must be retried on
+    // the next sync instead of waiting ten minutes.
+    if (ok) lastHookedReport = now
   }
 
   /**

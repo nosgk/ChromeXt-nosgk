@@ -1,5 +1,6 @@
 package org.matrix.chromext.action
 
+import android.content.Context
 import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
@@ -12,6 +13,9 @@ import org.matrix.chromext.ui.ManagerLauncher
 import org.matrix.chromext.utils.Log
 import org.matrix.chromext.utils.matching
 import org.matrix.chromext.utils.parseOrigin
+
+/** An Intent extra must stay well under the ~1 MB Binder limit; UTF-16 doubles the size. */
+private const val MAX_INLINE_INSTALL_CHARS = 300_000
 
 object ScriptActions : ActionGroup {
   override val handlers =
@@ -26,17 +30,29 @@ object ScriptActions : ActionGroup {
                   Log.i("Install script ${script.id}")
                   val ctx = runCatching { Chrome.getContext() }.getOrNull()
                   if (ScriptDbManager.engine.installConfirm && ctx != null) {
+                    // Some Chromium/WebView hosts are not in the browser catalog; the provider only
+                    // accepts packages it has reported as hooked. Re-report from here so staging
+                    // works even when the startup report was lost (module process not running yet).
+                    reportCallerPackage(ctx)
                     // Confirmation is mandatory: stage the payload and open the manager screen.
                     // Nothing reaches the script library until the user taps 安装 there, and only
                     // the token travels in the Intent, so large scripts work too.
                     val token = CentralBridge.stageInstall(context.payload)
-                    if (token == null) {
+                    if (token != null) {
+                      if (!ManagerLauncher.installScript(ctx, token)) {
+                        // Background-activity limits can drop the direct start; the notification
+                        // opens the same confirmation screen from a tap.
+                        ManagerLauncher.notifyPendingInstall(ctx, token)
+                        callback = "alert('${openManagerMessage()}');"
+                      }
+                    } else if (context.payload.length <= MAX_INLINE_INSTALL_CHARS &&
+                        ManagerLauncher.installScriptWithText(ctx, context.payload)) {
+                      // Provider staging failed (module process unreachable); a small script can
+                      // still travel through the Intent and show the same confirmation screen.
+                      Log.i("Staged install unavailable; opened the confirmation screen inline")
+                    } else {
+                      Log.e("Cannot stage the install payload for ${ctx.packageName}")
                       callback = "alert('${stageFailedMessage()}');"
-                    } else if (!ManagerLauncher.installScript(ctx, token)) {
-                      // Background-activity limits can drop the direct start; the notification
-                      // opens the same confirmation screen from a tap.
-                      ManagerLauncher.notifyPendingInstall(ctx, token)
-                      callback = "alert('${openManagerMessage()}');"
                     }
                   } else {
                     val existing = ScriptDbManager.scripts.find { it.id == script.id }
@@ -163,6 +179,21 @@ object ScriptActions : ActionGroup {
       )
 
   private fun chinese(): Boolean = Locale.getDefault().language.lowercase().startsWith("zh")
+
+  /**
+   * The provider's caller check accepts catalog browsers and packages reported in `hooked_app`.
+   * Chromium-based apps outside the catalog may have lost their startup report because the module
+   * process was not running yet; re-report before the first provider call.
+   */
+  private fun reportCallerPackage(ctx: Context) {
+    val packageName = runCatching { ctx.packageName }.getOrNull() ?: return
+    runCatching {
+      val pm = ctx.packageManager
+      val info = pm.getApplicationInfo(packageName, 0)
+      CentralBridge.reportHookedApp(
+          packageName, pm.getApplicationLabel(info).toString(), Chrome.version ?: "")
+    }
+  }
 
   private fun invalidScriptMessage(): String =
       if (chinese()) "无效的用户脚本" else "Invalid UserScript"

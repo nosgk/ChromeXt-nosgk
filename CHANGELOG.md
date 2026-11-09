@@ -2,6 +2,12 @@
 
 All notable changes to this fork are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the module's `versionName`.
 
+## [3.15.3] - 2026-11-09
+
+### Fixed
+
+- Some Chromium/WebView hosts could not stage an install payload (“无法暂存脚本”). The provider only accepts catalog browsers and packages already recorded in `hooked_app`, while the startup report from `onPackageReady` can be lost when the module process is not running yet. The browser now re-reports its own package immediately before staging and retries the report during sync; if staging still fails, scripts up to 300 000 characters fall back to the inline Intent (large scripts show a clear error instead of a silent failure).
+
 ## [3.15.2] - 2026-11-09
 
 ### Added
@@ -228,7 +234,8 @@ All notable changes to this fork are documented here. The format follows [Keep a
 - Support for the MVC page menu design.
 - Loading-state tracking for browsers where `mIsLoading` cannot be located.
 
-[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.15.2...HEAD
+[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.15.3...HEAD
+[3.15.3]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.15.3
 [3.15.2]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.15.2
 [3.15.1]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.15.1
 [3.15.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.15.0
