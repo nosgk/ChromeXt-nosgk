@@ -281,7 +281,7 @@
 	<string name="settings_storage_no_root">Could not run su. Make sure ChromeXt is granted root access.</string>
 	<string name="settings_storage_not_found_hint">No local database was found. If the upstream ChromeXt did install scripts, open that browser once so it creates the database, or use “Import from file” to pick the database file.</string>
 	<string name="settings_storage_pick_file">Import from file</string>
-	<string name="settings_storage_hint">Scripts live under Download/ChromeXT/: userscript holds .user.js mirrors, resources holds @require/@resource payloads and the runtime cache. The central database stays in the module's private directory; browsers no longer write their own userscript database.</string>
+	<string name="settings_storage_hint">Scripts live under Download/ChromeXT/: userscript holds .user.js mirrors, resources holds @require/@resource payloads and the runtime cache. The central database stays in the private module directory; browsers no longer write their own userscript database.</string>
 	<string name="settings_activated_count">%1$d activated</string>
 
 	<!-- Import preview -->
