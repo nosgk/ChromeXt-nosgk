@@ -48,7 +48,6 @@ import kotlinx.coroutines.withContext
 import org.matrix.chromext.R
 import org.matrix.chromext.script.Script
 import org.matrix.chromext.script.parseScript
-import org.matrix.chromext.utils.Log
 
 class InstallScriptActivity : ComponentActivity() {
 
@@ -140,23 +139,18 @@ private fun InstallScriptScreen(
       }
 
   LaunchedEffect(uri, provided, token) {
-    Log.d(
-        "install screen: token=$token provided=${provided?.length} uri=$uri " +
-            "package=$sourcePackage")
     if (text == null && token != null) {
       text = withContext(Dispatchers.IO) { readStaged(context, token) }
     }
     if (text == null && uri != null) {
       text = withContext(Dispatchers.IO) { readText(context, uri) }
     }
-    Log.d("install screen: read ${text?.length ?: 0} chars")
     if (text == null) error = R.string.install_error_read
   }
   LaunchedEffect(text) {
     val source = text ?: return@LaunchedEffect
     val parsed = parseScript(source, null, hydrateRequires = false)
     if (parsed == null) {
-      Log.d("install screen: the payload is not a UserScript")
       error = R.string.install_error_invalid
     } else {
       script = parsed
@@ -164,8 +158,6 @@ private fun InstallScriptScreen(
       existingFound = existing != null
       existingVersion = existing?.version
       existingApps = existing?.apps ?: emptyList()
-      Log.d(
-          "install screen: parsed ${parsed.id} existing=$existingFound apps=$existingApps")
     }
   }
 
@@ -258,8 +250,7 @@ private fun InstallScriptScreen(
                 val updated =
                     current.copy(apps = scopedApps, lastUpdated = System.currentTimeMillis())
                 scope.launch {
-                  val saved = withContext(Dispatchers.IO) { repository.saveHydrated(updated) }
-                  Log.d("install screen: save+edit ${updated.id} -> $saved")
+                  withContext(Dispatchers.IO) { repository.saveHydrated(updated) }
                   onEdit(updated)
                 }
               },
@@ -272,8 +263,7 @@ private fun InstallScriptScreen(
                 val updated =
                     current.copy(apps = scopedApps, lastUpdated = System.currentTimeMillis())
                 scope.launch {
-                  val saved = withContext(Dispatchers.IO) { repository.saveHydrated(updated) }
-                  Log.d("install screen: save+install ${updated.id} -> $saved")
+                  withContext(Dispatchers.IO) { repository.saveHydrated(updated) }
                   onInstalled()
                 }
               },

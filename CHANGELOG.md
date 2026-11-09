@@ -2,40 +2,6 @@
 
 All notable changes to this fork are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the module's `versionName`.
 
-## [3.15.6] - 2026-11-09
-
-### Fixed
-
-- The log file was still empty on a scoped WebView host even though the module loaded (`package ready` appeared in the LSPosed log). `onPackageReady` runs before both the Application and the system context exist, so no Context was available to attach and every early probe was dropped. `ModuleLog` now queues lines before a Context exists and flushes them once `Application.onCreate` fires (hooked once per process, also used to report the host in `hooked_app`); the process name, not the loaded-code package name (`com.google.android.webview`), is used as the log tag.
-
-### Changed
-
-- The framework `WebViewClient`/`WebChromeClient` constructor hooks are installed once per process instead of once per loaded package.
-
-## [3.15.5] - 2026-11-09
-
-### Fixed
-
-- The detailed debug log stayed empty even with the switch on. `onPackageReady` fires before the Application exists, so `ModuleLog` never attached and every startup hook probe was dropped from the file; `CentralBridge` also required `Chrome.getContext()`, which is unavailable before a tab exists. The module now attaches the system context with the package name as the log label, the bridge falls back to that context for provider calls, and the manager applies the switch immediately and writes a transition marker.
-
-### Added
-
-- “写入测试日志” in the diagnostics card appends a synchronous marker line, which separates “the log file cannot be written” from “the hooked app never reached a probe”.
-
-## [3.15.4] - 2026-11-09
-
-### Added
-
-- “详细调试日志” switch under Settings → Diagnostics. When on, hook installation, injection matching, provider calls and install staging are recorded in a rolling on-device log (`files/logs/chromext.log`, rotated at 512 KB) and mirrored to the LSPosed log. The same card shows the log path and size and can view, copy or clear the log, so a report from a scoped WebView host no longer needs `adb logcat`. The log carries package/process tags, page URLs (truncated) and script ids, never script bodies.
-- The provider answers `getConfig` and `appendLog` before the caller check. A hooked host whose script access is still denied can therefore read the verbose switch and ship its own log lines — the exact case the switch exists to diagnose. Neither method records the caller as hooked and neither exposes script rows.
-
-### Changed
-
-- `Log.d`/`Log.i` are no longer compiled out of release builds: they follow the switch (verbose stays on until the first config sync, so startup and provider failures are always captured), while warnings and errors are always written.
-- `CentralBridge` keeps the last provider exception (`SecurityException`, `DeadObjectException`, …) instead of silently returning null, and the sync path logs provider availability, record count and revision.
-- Provider rejections and the results of `reportHookedApp`, `stageInstall`, `upsertScript`, `deleteScripts`, `toggleScript`, `hydrateScript` and `queryScripts` are logged with the caller uid/packages.
-- Hook installation failures and the concrete `WebViewClient`/`WebChromeClient` classes found in a WebView host are logged, and a Tencent X5/TBS kernel inside the hooked package is reported explicitly (ChromeXt still only hooks `android.webkit.WebView`).
-
 ## [3.15.3] - 2026-11-09
 
 ### Fixed

@@ -20,7 +20,6 @@ import org.matrix.chromext.script.ScriptStore
 import org.matrix.chromext.script.toRecord
 import org.matrix.chromext.script.toScript
 import org.matrix.chromext.utils.Log
-import org.matrix.chromext.utils.ModuleLog
 
 /**
  * Central script database exposed to hooked browser processes.
@@ -35,31 +34,26 @@ class ScriptContentProvider : ContentProvider() {
 
   override fun onCreate(): Boolean {
     store = ScriptStore(context!!)
-    // The provider runs in the module process, so its own log lines go straight to the file.
-    ModuleLog.attach(context!!)
     return true
   }
 
   override fun call(method: String, arg: String?, extras: Bundle?): Bundle? {
-    val bundle = extras ?: Bundle()
     // Reporting is open to any hooked app (including ones the user added to the Xposed scope by
     // hand), so it is validated by package ownership instead of the browser whitelist below.
-    if (method == "reportHookedApp") return reportHookedApp(bundle)
-    // Read-only metadata answered before the caller check: a hooked host whose script access is
-    // still denied must be able to read the verbose-log switch (that is exactly when its log is
-    // needed) and ship its own log lines. Neither method exposes script rows and neither records
-    // the caller as hooked, so this cannot be used to gain script access.
-    when (method) {
-      "getConfig" -> return configBundle()
-      "appendLog" -> return appendLog(bundle)
-    }
-    if (!callerAllowed(method)) {
+    if (method == "reportHookedApp") return reportHookedApp(extras ?: Bundle())
+    if (!callerAllowed()) {
       throw SecurityException("ChromeXt provider: caller UID is not a supported browser")
     }
     val db = store ?: return null
+    val bundle = extras ?: Bundle()
     recordCaller()
     return when (method) {
       "ping" -> Bundle().apply { putBoolean("available", true) }
+      "getConfig" -> {
+        val json = JSONObject()
+        db.config().forEach { (key, value) -> json.put(key, value) }
+        Bundle().apply { putString("config", json.toString()) }
+      }
       "queryScripts" -> {
         val array = JSONArray()
         db.records().forEach { array.put(it.toJson()) }
@@ -76,7 +70,6 @@ class ScriptContentProvider : ContentProvider() {
               it.name != name && System.currentTimeMillis() - it.lastModified() > 60_000
             }
             ?.forEach { runCatching { it.delete() } }
-        Log.d("provider queryScripts: ${array.length()} records -> $name")
         Bundle().apply {
           putString("uri", "content://org.matrix.chromext.scripts/file/$name")
         }
@@ -90,7 +83,6 @@ class ScriptContentProvider : ContentProvider() {
           runCatching { ScriptFiles.mirrorScript(context!!, db, parsed) }
           runCatching { ScriptFiles.writeManifest(context!!, db) }
         }
-        Log.d("provider upsertScript: ${parsed?.id ?: "unparsable"} ok=$ok")
         Bundle().apply { putBoolean("ok", ok) }
       }
       "toggleScript" -> {
@@ -98,7 +90,6 @@ class ScriptContentProvider : ContentProvider() {
         val enabled = bundle.getBoolean("enabled", true)
         val ok = db.setEnabled(id, enabled)
         if (ok) runCatching { ScriptFiles.writeManifest(context!!, db) }
-        Log.d("provider toggleScript: $id -> $enabled ok=$ok")
         Bundle().apply { putBoolean("ok", ok) }
       }
       "deleteScripts" -> {
@@ -106,7 +97,6 @@ class ScriptContentProvider : ContentProvider() {
         ids.forEach { runCatching { ScriptFiles.deleteScriptMirror(context!!, db, it) } }
         db.delete(ids)
         runCatching { ScriptFiles.writeManifest(context!!, db) }
-        Log.d("provider deleteScripts: ${ids.size} ids")
         Bundle().apply { putBoolean("ok", true) }
       }
       "updateStorage" -> {
@@ -148,18 +138,12 @@ class ScriptContentProvider : ContentProvider() {
                       } else false
                     }
                     .getOrDefault(false)
-        Log.d("provider hydrateScript: $id ok=$ok")
         Bundle().apply { putBoolean("ok", ok) }
       }
       "stageInstall" -> {
         // The browser cannot pass an 800 KB script through an Intent extra or a Binder Bundle.
         // Keep the payload in the module's private directory and hand the manager screen a token.
-        val source = inboxFile(bundle)
-        if (source == null) {
-          Log.e("provider stageInstall: inbox payload missing")
-          return Bundle()
-        }
-        val size = source.length()
+        val source = inboxFile(bundle) ?: return Bundle()
         val pending = File(context!!.filesDir, PENDING_DIR).apply { mkdirs() }
         val now = System.currentTimeMillis()
         pending
@@ -173,16 +157,9 @@ class ScriptContentProvider : ContentProvider() {
                   source.copyTo(target, overwrite = true)
                   true
                 }
-                .onFailure { Log.ex(it, "provider stageInstall: cannot copy ${source.name}") }
                 .getOrDefault(false)
         source.delete()
-        if (ok) {
-          Log.d("provider stageInstall: token=$token size=$size")
-          Bundle().apply { putString("token", token) }
-        } else {
-          Log.e("provider stageInstall: failed for ${target.name}")
-          Bundle()
-        }
+        if (ok) Bundle().apply { putString("token", token) } else Bundle()
       }
       "getResource" -> {
         val key = bundle.getString("key") ?: return Bundle()
@@ -245,7 +222,6 @@ class ScriptContentProvider : ContentProvider() {
 
   private companion object {
     const val MAX_RESOURCE_BYTES = 512 * 1024
-    const val MAX_LOG_CHARS = 16 * 1024
     const val SNAPSHOT_PREFIX = "script-snapshot-"
     const val PENDING_DIR = "pending"
     const val PENDING_TTL_MS = 24 * 60 * 60 * 1000L
@@ -262,32 +238,6 @@ class ScriptContentProvider : ContentProvider() {
   }
 
   private var lastCallerReport = 0L
-
-  /** Engine switches only; deliberately readable before the caller check (see [call]). */
-  private fun configBundle(): Bundle? {
-    val db = store ?: return null
-    val json = JSONObject()
-    db.config().forEach { (key, value) -> json.put(key, value) }
-    return Bundle().apply { putString("config", json.toString()) }
-  }
-
-  /**
-   * Appends a batch of log lines from a hooked app. Also readable before the caller check: a host
-   * whose script access is denied is exactly the host whose log is worth having. The batch size is
-   * bounded and the caller package is resolved from the Binder UID, never from the payload.
-   */
-  private fun appendLog(bundle: Bundle): Bundle {
-    val lines = bundle.getString("lines")
-    val ctx = context
-    if (lines.isNullOrBlank() || ctx == null) return Bundle().apply { putBoolean("ok", false) }
-    val uid = Binder.getCallingUid()
-    val caller = ctx.packageManager?.getPackagesForUid(uid)?.firstOrNull() ?: "uid:$uid"
-    val body = if (lines.length <= MAX_LOG_CHARS) lines else lines.take(MAX_LOG_CHARS)
-    ModuleLog.write(
-        ctx,
-        listOf("# ${System.currentTimeMillis()} from $caller ($uid)") + body.split('\n'))
-    return Bundle().apply { putBoolean("ok", true) }
-  }
 
   /**
    * Any authorized browser that talks to the provider is, by definition, running the module. Record
@@ -319,7 +269,6 @@ class ScriptContentProvider : ContentProvider() {
     val versionName = bundle.getString("version") ?: ""
     val ok = store?.reportHookedApp(packageName, label, versionName) ?: false
     if (ok) allowedPackages += packageName
-    Log.d("provider reportHookedApp: $packageName ok=$ok")
     return Bundle().apply { putBoolean("ok", ok) }
   }
 
@@ -327,31 +276,21 @@ class ScriptContentProvider : ContentProvider() {
       java.util.Collections.newSetFromMap(
           java.util.concurrent.ConcurrentHashMap<String, Boolean>())
 
-  private fun callerAllowed(method: String = "openFile"): Boolean {
+  private fun callerAllowed(): Boolean {
     val uid = Binder.getCallingUid()
     if (uid == Process.myUid()) return true
-    val packages = context?.packageManager?.getPackagesForUid(uid)
-    if (packages.isNullOrEmpty()) {
-      Log.e("provider rejected $method: uid $uid owns no package")
-      return false
-    }
+    val packages = context?.packageManager?.getPackagesForUid(uid) ?: return false
     val catalog = BrowserCatalog.xposedScope.toSet()
     // Browsers are always allowed. Other scoped hosts (WebView apps the user hooked by hand, for
     // example a note-taking app) are allowed once the module has reported itself inside them;
     // reportHookedApp validates that the caller owns the package, so this cannot be claimed by an
     // unrelated app. Before 3.15 those apps relied on a browser-local database copy.
-    val allowed =
-        packages.any { packageName ->
-          if (packageName in catalog || packageName in allowedPackages) return@any true
-          val hooked = store?.isHookedApp(packageName) == true
-          if (hooked) allowedPackages += packageName
-          hooked
-        }
-    if (!allowed) {
-      Log.e(
-          "provider rejected $method: uid $uid packages ${packages.joinToString(",")} not hooked")
+    return packages.any { packageName ->
+      if (packageName in catalog || packageName in allowedPackages) return@any true
+      val hooked = store?.isHookedApp(packageName) == true
+      if (hooked) allowedPackages += packageName
+      hooked
     }
-    return allowed
   }
 
   /**
@@ -360,7 +299,7 @@ class ScriptContentProvider : ContentProvider() {
    * travel through [call].
    */
   override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? {
-    if (!callerAllowed("openFile")) {
+    if (!callerAllowed()) {
       throw SecurityException("ChromeXt provider: caller UID is not a supported browser")
     }
     val segments = uri.pathSegments

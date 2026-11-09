@@ -25,18 +25,12 @@ object WebViewHook : BaseHook() {
 
   fun evaluateJavascript(code: String?, view: Any?) {
     val webView = (view ?: Chrome.getTab())
-    if (code == null || code.length == 0) return
-    if (webView == null) {
-      Log.d("evaluateJavascript skipped: no WebView")
-      return
-    }
-    val webSettings = webView.invokeMethod { name == "getSettings" }
-    if (webSettings?.invokeMethod { name == "getJavaScriptEnabled" } != true) {
-      Log.d("evaluateJavascript skipped: JavaScript is disabled in this WebView")
-      return
-    }
-    Handler(Chrome.getContext().mainLooper).post {
-      webView.invokeMethod(code, null) { name == "evaluateJavascript" }
+    if (code != null && code.length > 0 && webView != null) {
+      val webSettings = webView.invokeMethod { name == "getSettings" }
+      if (webSettings?.invokeMethod { name == "getJavaScriptEnabled" } == true)
+          Handler(Chrome.getContext().mainLooper).post {
+            webView.invokeMethod(code, null) { name == "evaluateJavascript" }
+          }
     }
   }
 
@@ -88,24 +82,16 @@ object WebViewHook : BaseHook() {
           val webView = it.thisObject
           records.removeAll(records.filter { it.get() == null || it.get() == webView })
           if (it.args[0] != null) records.add(WeakReference(webView))
-          Log.d(
-              "setWebChromeClient: ${webView.javaClass.name} " +
-                  "client=${it.args[0]?.javaClass?.name}")
         }
 
     findMethod(WebView!!) { name == "onAttachedToWindow" }
-        .hookAfter {
-          Log.d("WebView attached: ${it.thisObject.javaClass.name}")
-          Chrome.updateTab(it.thisObject)
-        }
+        .hookAfter { Chrome.updateTab(it.thisObject) }
 
     findMethod(ViewClient!!, true) { name == "onPageStarted" }
         // public void onPageStarted (WebView view, String url, Bitmap favicon)
         .hookAfter {
           if (Chrome.isQihoo && it.thisObject::class.java.declaredMethods.size > 1) return@hookAfter
-          val url = it.args[1] as String
-          Log.d("onPageStarted: ${it.thisObject.javaClass.name} $url")
-          onUpdateUrl(url, it.args[0])
+          onUpdateUrl(it.args[1] as String, it.args[0])
         }
 
     findMethod(Activity::class.java) { name == "onStop" }

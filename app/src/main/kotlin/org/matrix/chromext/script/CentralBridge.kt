@@ -1,12 +1,9 @@
 package org.matrix.chromext.script
 
-import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import org.json.JSONArray
 import org.matrix.chromext.Chrome
-import org.matrix.chromext.utils.Log
-import org.matrix.chromext.utils.ModuleLog
 
 /**
  * Browser-side client for [org.matrix.chromext.provider.ScriptContentProvider]. Every call is
@@ -23,31 +20,8 @@ object CentralBridge {
   private const val AUTHORITY = "content://org.matrix.chromext.scripts"
   private val uri = Uri.parse(AUTHORITY)
 
-  /**
-   * Last bridge failure as `method: ExceptionType: message`. The provider call is best-effort by
-   * design, but "rejected by the caller check" and "provider not running" used to look identical
-   * (both returned null); the diagnostics now show which one happened.
-   */
-  @Volatile var lastError: String? = null
-    private set
-
-  private fun fail(method: String, error: Throwable): Unit {
-    lastError = "$method: ${error::class.java.simpleName}: ${error.message}"
-    // dLocal: logging a failed appendLog through the sink would recurse.
-    Log.dLocal("provider $lastError")
-  }
-
-  /**
-   * The context attached for logging is always available after `onPackageReady` and belongs to this
-   * process; `Chrome.getContext()` additionally needs a tab and is only the fallback. Ordering it
-   * this way also keeps a failed lookup from logging through the same sink (which would recurse).
-   */
-  private fun appContext(): Context =
-      ModuleLog.contextOrNull() ?: Chrome.getContext()
-
   private fun call(method: String, extras: Bundle? = null): Bundle? =
-      runCatching { appContext().contentResolver.call(uri, method, null, extras) }
-          .onFailure { fail(method, it) }
+      runCatching { Chrome.getContext().contentResolver.call(uri, method, null, extras) }
           .getOrNull()
 
   private fun inboxUri(name: String): Uri =
@@ -57,13 +31,11 @@ object CentralBridge {
   private fun writeInbox(json: String): String? {
     val name = "upload-" + System.nanoTime() + ".json"
     return runCatching {
-          val stream =
-              appContext().contentResolver.openOutputStream(inboxUri(name))
-                  ?: throw IllegalStateException("inbox stream unavailable")
-          stream.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+          Chrome.getContext().contentResolver.openOutputStream(inboxUri(name))?.use {
+            it.write(json.toByteArray(Charsets.UTF_8))
+          } ?: return@runCatching null
           name
         }
-        .onFailure { fail("openOutputStream(inbox)", it) }
         .getOrNull()
   }
 
@@ -81,12 +53,11 @@ object CentralBridge {
   fun queryRecords(): List<ScriptRecord>? {
     val target = call("queryScripts")?.getString("uri") ?: return null
     return runCatching {
-          appContext().contentResolver.openInputStream(Uri.parse(target))?.use { input ->
+          Chrome.getContext().contentResolver.openInputStream(Uri.parse(target))?.use { input ->
             val array = JSONArray(input.bufferedReader().readText())
             List(array.length()) { ScriptRecord.fromJson(array.getJSONObject(it)) }
           }
         }
-        .onFailure { fail("queryScripts(openInputStream)", it) }
         .getOrNull()
   }
 
@@ -138,14 +109,8 @@ object CentralBridge {
     return call("stageInstall", extras)?.getString("token")
   }
 
-  /** Ships a batch of already formatted log lines to the module's rolling log file. */
-  fun appendLog(lines: String): Boolean {
-    if (lines.isBlank()) return true
-    val extras = Bundle().apply { putString("lines", lines) }
-    return call("appendLog", extras)?.getBoolean("ok") == true
-  }
-
-  fun getResource(key: String): CachedResource? {    val bundle = call("getResource", Bundle().apply { putString("key", key) }) ?: return null
+  fun getResource(key: String): CachedResource? {
+    val bundle = call("getResource", Bundle().apply { putString("key", key) }) ?: return null
     val data = bundle.getByteArray("data") ?: return null
     return CachedResource(data, bundle.getLong("modified"))
   }

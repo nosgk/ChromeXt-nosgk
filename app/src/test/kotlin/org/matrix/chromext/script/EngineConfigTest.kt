@@ -19,7 +19,6 @@ class EngineConfigTest {
     assertTrue(config.injectionEnabled)
     assertTrue(config.installConfirm)
     assertTrue(config.resourceCache)
-    assertFalse(config.verboseLog)
   }
 
   @Test
@@ -36,7 +35,6 @@ class EngineConfigTest {
                 EngineConfig.KEY_INJECTION to "false",
                 EngineConfig.KEY_INSTALL_CONFIRM to "false",
                 EngineConfig.KEY_RESOURCE_CACHE to "false",
-                EngineConfig.KEY_VERBOSE_LOG to "true",
             ))
     assertFalse(config.keepStorage)
     assertFalse(config.cspRules)
@@ -47,14 +45,12 @@ class EngineConfigTest {
     assertFalse(config.injectionEnabled)
     assertFalse(config.installConfirm)
     assertFalse(config.resourceCache)
-    assertTrue(config.verboseLog)
   }
 
   @Test
   fun roundTripsThroughTheStoredMap() {
-    val config = EngineConfig(keepStorage = false, erudaEnabled = false, verboseLog = true)
+    val config = EngineConfig(keepStorage = false, erudaEnabled = false)
     assertEquals(config, EngineConfig.from(config.toMap()))
-    assertTrue(EngineConfig.from(config.toMap()).verboseLog)
   }
 
   @Test

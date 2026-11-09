@@ -59,7 +59,6 @@ object ScriptDbManager {
 
   init {
     val ctx = Chrome.getContext()
-    Log.d("script cache: ${scripts.size} entries, package=${Chrome.packageName}")
     @Suppress("UNCHECKED_CAST")
     cosmeticFilters =
         ctx.getSharedPreferences("CosmeticFilter", Context.MODE_PRIVATE).getAll()
@@ -147,10 +146,7 @@ object ScriptDbManager {
     lastRevisionCheck = now
     Chrome.IO.submit {
       val revision = CentralBridge.revision() ?: return@submit
-      if (revision != cachedRevision) {
-        Log.d("revision $cachedRevision -> $revision, refreshing from the provider")
-        syncWithCentral()
-      }
+      if (revision != cachedRevision) syncWithCentral()
     }
   }
 
@@ -160,24 +156,15 @@ object ScriptDbManager {
     // running yet), which made staging/installs fail; retry the report before the availability
     // check, since reportHookedApp is handled before the caller check.
     reportHookedOnce()
-    // Read the config before the availability check: getConfig is deliberately not caller-gated,
-    // so a host whose script access is denied can still pick up the verbose-log switch. That is
-    // exactly the case the switch has to diagnose.
-    CentralBridge.getConfig()?.let { applyConfig(it) }
     if (!CentralBridge.isAvailable()) {
       providerReady = false
-      Log.d("sync: provider unavailable (${CentralBridge.lastError ?: "no error"})")
       return
     }
     providerReady = true
+    applyConfig(CentralBridge.getConfig() ?: emptyMap())
     importLegacyOnce()
-    val central = CentralBridge.queryRecords()
-    if (central == null) {
-      Log.d("sync: queryScripts failed (${CentralBridge.lastError ?: "no error"})")
-      return
-    }
+    val central = CentralBridge.queryRecords() ?: return
     cachedRevision = CentralBridge.revision() ?: cachedRevision
-    Log.d("sync: ${central.size} records, revision=$cachedRevision")
     refreshFromCentral(central)
     hydrateMissingRequires(central)
   }
@@ -196,7 +183,6 @@ object ScriptDbManager {
                   packageName, pm.getApplicationLabel(info).toString(), Chrome.version ?: "")
             }
             .getOrDefault(false)
-    Log.d("reportHookedApp($packageName) -> $ok")
     // Only remember a successful report; a provider that was not running yet must be retried on
     // the next sync instead of waiting ten minutes.
     if (ok) lastHookedReport = now
@@ -248,7 +234,6 @@ object ScriptDbManager {
   private fun applyConfig(values: Map<String, String>) {
     runCatching {
           val updated = EngineConfig.from(values)
-          Log.setVerbose(updated.verboseLog)
           if (updated == engine) return
           val previous = engine
           engine = updated
@@ -290,7 +275,6 @@ object ScriptDbManager {
 
   fun invokeScript(url: String, webView: Any? = null, frameId: String? = null) {
     refreshIfStale()
-    Log.d("invokeScript pkg=${Chrome.packageName} frame=${frameId ?: "-"} url=${url.take(300)}")
     val codes = mutableListOf<String>(Local.initChromeXt)
     val path = resolveContentUrl(url)
     val webSettings = webView?.invokeMethod { name == "getSettings" }
@@ -359,36 +343,18 @@ object ScriptDbManager {
     if (asyncEvaluation) codes.add(initScript)
     if (runScripts) {
       if (engine.injectionEnabled) {
-        val matched = mutableListOf<Script>()
-        scripts.forEach { script ->
-          when {
-            !script.enabled -> return@forEach
-            !matching(script, url) -> {
-              Log.d("skip ${script.id}: url rules ${script.effectiveMatchRules()}")
-              return@forEach
+        scripts
+            .filter {
+              it.enabled &&
+                  matching(it, url) &&
+                  it.appliesTo(Chrome.packageName) &&
+                  !(frameId != null && it.noframes)
             }
-            !script.appliesTo(Chrome.packageName) -> {
-              Log.d("skip ${script.id}: app scope ${script.apps} vs ${Chrome.packageName}")
-              return@forEach
+            .sortedBy { it.sortOrder }
+            .forEach {
+              if (it.grant.contains("frames")) framesGranted = true
+              GM.bootstrap(it, codes)
             }
-            frameId != null && script.noframes -> {
-              Log.d("skip ${script.id}: noframes")
-              return@forEach
-            }
-            else -> matched.add(script)
-          }
-        }
-        Log.d(
-            "inject pkg=${Chrome.packageName} matched=${matched.size}/${scripts.size} " +
-                "ids=${matched.joinToString(",") { it.id }}",
-            full = true,
-        )
-        matched.sortedBy { it.sortOrder }.forEach {
-          if (it.grant.contains("frames")) framesGranted = true
-          GM.bootstrap(it, codes)
-        }
-      } else {
-        Log.d("inject skipped: global injection is disabled")
       }
       if (frameId == null && engine.erudaEnabled && engine.erudaAuto) {
         // Mounts the console on load; the snippet asks the module for the Eruda source the first

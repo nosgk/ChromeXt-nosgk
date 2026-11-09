@@ -18,13 +18,6 @@ data class EngineConfig(
     val installConfirm: Boolean = true,
     /** Serve GM_xmlhttpRequest GETs from Download/ChromeXT/resources and cache successful ones. */
     val resourceCache: Boolean = true,
-    /**
-     * Detailed diagnostics: hook installation, injection matching, provider calls and install
-     * staging. Written to the rolling module log and mirrored to the LSPosed log. Off by default;
-     * [org.matrix.chromext.utils.Log] stays verbose until the first config arrives so startup and
-     * provider failures are always captured.
-     */
-    val verboseLog: Boolean = false,
 ) {
   fun toMap(): Map<String, String> =
       mapOf(
@@ -37,7 +30,6 @@ data class EngineConfig(
           KEY_INJECTION to injectionEnabled.toString(),
           KEY_INSTALL_CONFIRM to installConfirm.toString(),
           KEY_RESOURCE_CACHE to resourceCache.toString(),
-          KEY_VERBOSE_LOG to verboseLog.toString(),
       )
 
   companion object {
@@ -50,7 +42,6 @@ data class EngineConfig(
     const val KEY_INJECTION = "injection_enabled"
     const val KEY_INSTALL_CONFIRM = "install_confirm"
     const val KEY_RESOURCE_CACHE = "resource_cache"
-    const val KEY_VERBOSE_LOG = "verbose_log"
 
     fun from(values: Map<String, String>): EngineConfig =
         EngineConfig(
@@ -63,7 +54,6 @@ data class EngineConfig(
             injectionEnabled = values[KEY_INJECTION].toBooleanOrDefault(true),
             installConfirm = values[KEY_INSTALL_CONFIRM].toBooleanOrDefault(true),
             resourceCache = values[KEY_RESOURCE_CACHE].toBooleanOrDefault(true),
-            verboseLog = values[KEY_VERBOSE_LOG].toBooleanOrDefault(false),
         )
 
     private fun String?.toBooleanOrDefault(default: Boolean): Boolean =

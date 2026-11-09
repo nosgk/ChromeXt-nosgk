@@ -1,7 +1,5 @@
 package org.matrix.chromext.ui
 
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -22,15 +20,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -77,8 +72,6 @@ import org.matrix.chromext.script.LegacyReadResult
 import org.matrix.chromext.script.ScriptDbHelper
 import org.matrix.chromext.script.ScriptFiles
 import org.matrix.chromext.script.ScriptRecord
-import org.matrix.chromext.utils.Log
-import org.matrix.chromext.utils.ModuleLog
 import org.matrix.chromext.utils.Su
 
 private data class Telemetry(
@@ -131,9 +124,6 @@ fun SettingsScreen(
   var scanError by remember { mutableStateOf<String?>(null) }
   var importPreview by remember { mutableStateOf<ImportPreview?>(null) }
   var importingLabel by remember { mutableStateOf<String?>(null) }
-  var logPath by remember { mutableStateOf("") }
-  var logSize by remember { mutableStateOf(0L) }
-  var logText by remember { mutableStateOf<String?>(null) }
 
   fun loadTelemetry() {
     scope.launch {
@@ -178,13 +168,6 @@ fun SettingsScreen(
           }
       telemetry = loaded
       engine = withContext(Dispatchers.IO) { repository.engineConfig() }
-      val logInfo =
-          withContext(Dispatchers.IO) {
-            val file = ModuleLog.file(context)
-            file.absolutePath to file.length()
-          }
-      logPath = logInfo.first
-      logSize = logInfo.second
     }
   }
 
@@ -306,9 +289,6 @@ fun SettingsScreen(
 
   fun updateEngine(updated: EngineConfig) {
     engine = updated
-    // Apply the switch in the manager right away so the marker line lands immediately; hooked
-    // apps pick the value up on their next config sync.
-    Log.setVerbose(updated.verboseLog)
     scope.launch { withContext(Dispatchers.IO) { repository.saveEngineConfig(updated) } }
   }
 
@@ -399,29 +379,6 @@ fun SettingsScreen(
       }
       item(key = "engine") {
         EngineCard(engine = engine, onChange = { updateEngine(it) })
-      }
-      item(key = "diagnostics") {
-        DiagnosticsCard(
-            engine = engine,
-            logPath = logPath,
-            logSize = logSize,
-            onToggleVerbose = { updateEngine(engine.copy(verboseLog = it)) },
-            onViewLog = {
-              scope.launch { logText = withContext(Dispatchers.IO) { ModuleLog.read(context) } }
-            },
-            onSelfTest = {
-              ModuleLog.marker(context, "self-test from the settings page")
-              loadTelemetry()
-              onMessage(context.getString(R.string.settings_log_selftest_done))
-            },
-            onClearLog = {
-              scope.launch {
-                withContext(Dispatchers.IO) { ModuleLog.clear(context) }
-                loadTelemetry()
-                onMessage(context.getString(R.string.settings_log_cleared))
-              }
-            },
-        )
       }
       item(key = "storage") {
         StorageCard(
@@ -545,39 +502,6 @@ fun SettingsScreen(
         dismissButton = {
           TextButton(onClick = { confirmClearStorage = false }) {
             Text(stringResource(R.string.action_cancel))
-          }
-        },
-    )
-  }
-
-  logText?.let { text ->
-    AlertDialog(
-        onDismissRequest = { logText = null },
-        title = { Text(stringResource(R.string.settings_log_viewer_title)) },
-        text = {
-          SelectionContainer {
-            Text(
-                text.ifBlank { context.getString(R.string.settings_log_empty) },
-                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                modifier =
-                    Modifier.fillMaxWidth()
-                        .heightIn(max = 420.dp)
-                        .verticalScroll(rememberScrollState()),
-            )
-          }
-        },
-        confirmButton = {
-          TextButton(
-              onClick = {
-                copyToClipboard(context, text)
-                onMessage(context.getString(R.string.settings_log_copied))
-              }) {
-                Text(stringResource(R.string.settings_log_copy))
-              }
-        },
-        dismissButton = {
-          TextButton(onClick = { logText = null }) {
-            Text(stringResource(R.string.settings_log_close))
           }
         },
     )
@@ -881,57 +805,6 @@ private fun EngineCard(engine: EngineConfig, onChange: (EngineConfig) -> Unit) {
       )
       Text(
           stringResource(R.string.settings_engine_pending),
-          style = MaterialTheme.typography.labelSmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
-    }
-  }
-}
-
-@Composable
-private fun DiagnosticsCard(
-    engine: EngineConfig,
-    logPath: String,
-    logSize: Long,
-    onToggleVerbose: (Boolean) -> Unit,
-    onViewLog: () -> Unit,
-    onSelfTest: () -> Unit,
-    onClearLog: () -> Unit,
-) {
-  Card(modifier = Modifier.fillMaxWidth()) {
-    Column(modifier = Modifier.padding(14.dp)) {
-      Text(
-          stringResource(R.string.settings_diagnostics),
-          style = MaterialTheme.typography.titleMedium,
-      )
-      EngineSwitch(
-          title = stringResource(R.string.settings_engine_verbose_log),
-          hint = stringResource(R.string.settings_engine_verbose_log_hint),
-          checked = engine.verboseLog,
-          onCheckedChange = onToggleVerbose,
-      )
-      Text(
-          stringResource(R.string.settings_log_file, formatBytes(logSize)),
-          style = MaterialTheme.typography.labelSmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          modifier = Modifier.padding(top = 10.dp),
-      )
-      SelectionContainer {
-        Text(
-            logPath,
-            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
-      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        TextButton(onClick = onSelfTest) {
-          Text(stringResource(R.string.settings_log_selftest))
-        }
-        TextButton(onClick = onViewLog) { Text(stringResource(R.string.settings_log_view)) }
-        TextButton(onClick = onClearLog) { Text(stringResource(R.string.settings_log_clear)) }
-      }
-      Text(
-          stringResource(R.string.settings_log_hint),
           style = MaterialTheme.typography.labelSmall,
           color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
@@ -1343,13 +1216,6 @@ private fun formatTime(value: Long): String =
                   .format(java.util.Date(value))
             }
             .getOrDefault("")
-
-private fun copyToClipboard(context: Context, text: String) {
-  runCatching {
-    val manager = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    manager.setPrimaryClip(ClipData.newPlainText("ChromeXt log", text))
-  }
-}
 
 private fun formatBytes(bytes: Long): String =
     when {

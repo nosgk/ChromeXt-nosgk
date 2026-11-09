@@ -24,31 +24,22 @@ object ScriptActions : ActionGroup {
               ActionHandler { context ->
                 var callback: String? = null
                 val script = parseScript(context.payload, hydrateRequires = false)
-                Log.d("installScript: payload=${context.payload.length} chars")
                 if (script == null) {
-                  Log.d("installScript: payload is not a UserScript")
                   callback = "alert('${invalidScriptMessage()}');"
                 } else {
                   Log.i("Install script ${script.id}")
                   val ctx = runCatching { Chrome.getContext() }.getOrNull()
-                  Log.d(
-                      "installScript: pkg=${Chrome.packageName} " +
-                          "confirm=${ScriptDbManager.engine.installConfirm} ctx=${ctx != null}")
                   if (ScriptDbManager.engine.installConfirm && ctx != null) {
                     // Some Chromium/WebView hosts are not in the browser catalog; the provider only
                     // accepts packages it has reported as hooked. Re-report from here so staging
                     // works even when the startup report was lost (module process not running yet).
-                    val reported = reportCallerPackage(ctx)
-                    Log.d("installScript: reportHookedApp=$reported")
+                    reportCallerPackage(ctx)
                     // Confirmation is mandatory: stage the payload and open the manager screen.
                     // Nothing reaches the script library until the user taps 安装 there, and only
                     // the token travels in the Intent, so large scripts work too.
                     val token = CentralBridge.stageInstall(context.payload)
-                    Log.d("installScript: staged token=$token")
                     if (token != null) {
-                      val opened = ManagerLauncher.installScript(ctx, token)
-                      Log.d("installScript: manager opened=$opened")
-                      if (!opened) {
+                      if (!ManagerLauncher.installScript(ctx, token)) {
                         // Background-activity limits can drop the direct start; the notification
                         // opens the same confirmation screen from a tap.
                         ManagerLauncher.notifyPendingInstall(ctx, token)
@@ -60,9 +51,7 @@ object ScriptActions : ActionGroup {
                       // still travel through the Intent and show the same confirmation screen.
                       Log.i("Staged install unavailable; opened the confirmation screen inline")
                     } else {
-                      Log.e(
-                          "Cannot stage the install payload for ${ctx.packageName}: " +
-                              (CentralBridge.lastError ?: "no bridge error"))
+                      Log.e("Cannot stage the install payload for ${ctx.packageName}")
                       callback = "alert('${stageFailedMessage()}');"
                     }
                   } else {
@@ -96,12 +85,8 @@ object ScriptActions : ActionGroup {
                           )
                         }
                     if (!ScriptDbManager.insert(toInsert)) {
-                      Log.e("installScript: cannot insert ${toInsert.id}")
                       callback = "alert('${installFailedMessage()}');"
                     } else {
-                      Log.d(
-                          "installScript: inserted ${toInsert.id} apps=${toInsert.apps} " +
-                              "existing=${existing != null}")
                       Chrome.IO.submit { CentralBridge.hydrate(script.id) }
                     }
                   }
@@ -199,19 +184,15 @@ object ScriptActions : ActionGroup {
    * The provider's caller check accepts catalog browsers and packages reported in `hooked_app`.
    * Chromium-based apps outside the catalog may have lost their startup report because the module
    * process was not running yet; re-report before the first provider call.
-   *
-   * @return whether the provider accepted the report; a rejection is why staging fails next.
    */
-  private fun reportCallerPackage(ctx: Context): Boolean {
-    val packageName = runCatching { ctx.packageName }.getOrNull() ?: return false
-    return runCatching {
-          val pm = ctx.packageManager
-          val info = pm.getApplicationInfo(packageName, 0)
-          CentralBridge.reportHookedApp(
-              packageName, pm.getApplicationLabel(info).toString(), Chrome.version ?: "")
-        }
-        .onFailure { Log.d("reportCallerPackage failed: ${it.message}") }
-        .getOrDefault(false)
+  private fun reportCallerPackage(ctx: Context) {
+    val packageName = runCatching { ctx.packageName }.getOrNull() ?: return
+    runCatching {
+      val pm = ctx.packageManager
+      val info = pm.getApplicationInfo(packageName, 0)
+      CentralBridge.reportHookedApp(
+          packageName, pm.getApplicationLabel(info).toString(), Chrome.version ?: "")
+    }
   }
 
   private fun invalidScriptMessage(): String =
