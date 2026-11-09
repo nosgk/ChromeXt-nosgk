@@ -112,23 +112,32 @@ fun Script.toRecord(): ScriptRecord =
     )
 
 /** Rebuilds the injection model, keeping every manager-side override stored in the row. */
+fun Script.withRecord(record: ScriptRecord): Script {
+  val storageJson =
+      if (storage != null) {
+        record.storage?.let { runCatching { JSONObject(it) }.getOrNull() } ?: JSONObject()
+      } else null
+  return copy(
+      enabled = record.enabled,
+      sortOrder = record.sortOrder,
+      customMatch = record.customMatch,
+      customInclude = record.customInclude,
+      customExclude = record.customExclude,
+      customRunAt = record.customRunAt,
+      updateUrl = record.updateUrl,
+      iconUrl = record.iconUrl,
+      lastUpdated = record.lastUpdated,
+      apps = parseApps(record.apps),
+      lib = parseLib(record.lib),
+      resources = parseResources(record.resources),
+      storage = storageJson,
+  )
+}
+
 fun ScriptRecord.toScript(): Script? {
   val parsed = parseScript(meta + code, storage, hydrateRequires = false) ?: return null
   if (parsed.id != id) return null
-  return parsed.copy(
-      enabled = enabled,
-      sortOrder = sortOrder,
-      customMatch = customMatch,
-      customInclude = customInclude,
-      customExclude = customExclude,
-      customRunAt = customRunAt,
-      updateUrl = updateUrl,
-      iconUrl = iconUrl,
-      lastUpdated = lastUpdated,
-      apps = parseApps(apps),
-      lib = parseLib(lib),
-      resources = parseResources(resources),
-  )
+  return parsed.withRecord(this)
 }
 
 /** Mirrored `.user.js` document in the public Download directory. */

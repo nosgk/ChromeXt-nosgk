@@ -165,6 +165,7 @@
 	<string name="install_target_sites">目标站点</string>
 	<string name="install_permissions">请求权限</string>
 	<string name="install_code_preview">代码预览</string>
+	<string name="install_code_truncated">预览已截断，完整代码共 %1$d 字符</string>
 	<string name="install_author">作者：%1$s</string>
 	<string name="install_version">v%1$s</string>
 	<string name="install_version_diff">v%1$s → v%2$s</string>
@@ -176,6 +177,11 @@
 	<!-- 代码编辑器 -->
 	<string name="code_editor_title">代码编辑器</string>
 	<string name="code_editor_stats">%1$d 行 · %2$d 字符 · 第 %3$d 行 第 %4$d 列</string>
+	<string name="code_editor_viewer_stats">%1$d 行 · %2$d 字符 · 只读预览</string>
+	<string name="code_editor_edit">编辑</string>
+	<string name="code_editor_large_edit_title">编辑大体积脚本？</string>
+	<string name="code_editor_large_edit_body">脚本约 %1$d 字符，Compose 文本框可能明显卡顿；只读预览不受影响。</string>
+	<string name="code_editor_large_edit_confirm">仍然编辑</string>
 	<string name="code_editor_find">查找</string>
 	<string name="code_editor_replace">替换为</string>
 	<string name="code_editor_next">下一个</string>
@@ -294,7 +300,7 @@
 	<string name="import_match_count">%1$d 条匹配规则</string>
 	<string name="import_confirm">导入 %1$d 个</string>
 	<string name="import_invalid_hint">另有 %1$d 行无法解析，将被跳过。</string>
-	<string name="install_already_saved">已保存到脚本库，可在此确认、编辑或停用。</string>
+	<string name="install_already_saved">已存在同名脚本，点击「安装」将更新它。</string>
 	<string name="toggle_saved">已保存，浏览器下次加载页面时生效</string>
 	<string name="toggle_failed">保存失败，请确认模块进程未被系统限制</string>
 	<string name="script_activated">已激活 · %1$s · %2$s</string>

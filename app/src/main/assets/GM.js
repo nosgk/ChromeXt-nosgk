@@ -46,8 +46,18 @@ const GM_log = console.info.bind(
 
 function GM_notification(details, ondone) {
   let payload = {};
-  if (typeof details == "object") {
-    payload = { ...details, ondone };
+  if (details != null && typeof details == "object") {
+    // Copy only serializable fields: a circular or function-heavy details object made
+    // ChromeXt.dispatch's JSON.stringify throw a red console error.
+    payload = {
+      title: details.title,
+      text: details.text,
+      image: details.image,
+      timeout: details.timeout,
+      silent: details.silent,
+      highlight: details.highlight,
+    };
+    if (typeof ondone == "function") payload.ondone = ondone;
   } else {
     const props = ["text", "title", "image", "onclick", "timeout", "ondone"];
     props.splice(arguments.length, props.length);
@@ -63,13 +73,18 @@ function GM_notification(details, ondone) {
   } else {
     payload.timeout = 10000;
   }
-  if (!("text" in payload || payload.highlight))
-    throw TypeError("Parameter text not given");
+  // Tampermonkey scripts frequently omit `text` and rely on the title; do not throw a red
+  // TypeError in that case.
+  if (payload.text == null || payload.text === "") {
+    if (payload.highlight) payload.text = "";
+    else payload.text = payload.title == null ? "" : String(payload.title);
+  }
   let onclick;
-  if (typeof payload.onclick == "function") {
-    onclick = payload.onclick.bind(
-      typeof details == "object" ? details : payload
-    );
+  if (typeof details == "object" && typeof details.onclick == "function") {
+    onclick = details.onclick.bind(details);
+    payload.onclick = true;
+  } else if (typeof payload.onclick == "function") {
+    onclick = payload.onclick;
     payload.onclick = true;
   } else {
     delete payload.onclick;
@@ -314,12 +329,16 @@ class CookieParam {
 // Kotlin separator
 
 function GM_setClipboard(text, info = { type: "text" }) {
-  const type = info?.mimetype || info?.type || info;
-  if (typeof info != "object" && typeof type == "string") info = { type };
-  info.type = info.type || info.mimetype;
-  info.text = text;
+  // Tampermonkey accepts a string type, an object, or nothing at all. The previous version
+  // crashed with "Cannot set properties of null" for GM_setClipboard(text, null).
+  if (info == null || typeof info != "object") {
+    info = { type: typeof info == "string" ? info : "text" };
+  }
+  const type = String(info.type || info.mimetype || "text");
+  info.type = type.toLowerCase().includes("html") ? "html" : "text";
+  info.text = text == null ? "" : String(text);
   info.label = `GM_setClipboard by ${GM_info.script.id}`;
-  if (info.type == "html" && !("htmlText" in info)) info.htmlText = info.text;
+  if (info.type == "html") info.htmlText = info.htmlText || info.text;
   LockedChromeXt.unlock(key).dispatch("copy", info);
 }
 // Kotlin separator

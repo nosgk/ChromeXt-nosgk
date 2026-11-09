@@ -2,6 +2,24 @@
 
 All notable changes to this fork are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the module's `versionName`.
 
+## [3.15.2] - 2026-11-09
+
+### Added
+
+- Large scripts open in a virtualized read-only viewer (`LazyColumn` of lines) instead of a Compose text field; “编辑” is available behind an explicit warning. Code previews are capped, line counts are cached, and the search corpus is built on `Dispatchers.Default`.
+- Installing from a `.user.js` page now requires the native confirmation when “安装前确认” is on: the page dialog stages the payload and opens the manager screen; the script is written only after the user taps 安装 there. The payload travels as a token, so scripts larger than the Binder/Intent limit work, and a notification opens the same screen when the direct activity start is blocked.
+
+### Fixed
+
+- `GM_setClipboard` crashed with “Cannot set properties of null” for `GM_setClipboard(text, null)`, mishandled a string type, and let clipboard `SecurityException`s escape. It now accepts string/null/object info, normalizes `text`/`html`, and guards the clipboard write.
+- `GM_notification` threw red console errors when `title` or `text` was omitted, and a circular `details` object made `ChromeXt.dispatch`'s `JSON.stringify` throw. The payload is sanitized, title/text/timeout are optional, missing text falls back to the title, and the `highlight` Activity cast is guarded.
+- The install Intent carried the whole script text, which fails for ~800 KB scripts; it now carries a staged-file token.
+
+### Changed
+
+- `parseScript` splits the metadata block with `indexOf` instead of lazy `[\S\s]*?` regexes; large scripts parse much faster.
+- Both the manager and the browser keep parsed-script caches, so a refresh or revision change no longer re-parses unchanged bodies.
+
 ## [3.15.1] - 2026-11-09
 
 ### Fixed
@@ -210,7 +228,8 @@ All notable changes to this fork are documented here. The format follows [Keep a
 - Support for the MVC page menu design.
 - Loading-state tracking for browsers where `mIsLoading` cannot be located.
 
-[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.15.1...HEAD
+[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.15.2...HEAD
+[3.15.2]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.15.2
 [3.15.1]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.15.1
 [3.15.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.15.0
 [3.14.2]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.14.2

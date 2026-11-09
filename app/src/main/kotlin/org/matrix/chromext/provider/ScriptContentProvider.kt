@@ -140,6 +140,27 @@ class ScriptContentProvider : ContentProvider() {
                     .getOrDefault(false)
         Bundle().apply { putBoolean("ok", ok) }
       }
+      "stageInstall" -> {
+        // The browser cannot pass an 800 KB script through an Intent extra or a Binder Bundle.
+        // Keep the payload in the module's private directory and hand the manager screen a token.
+        val source = inboxFile(bundle) ?: return Bundle()
+        val pending = File(context!!.filesDir, PENDING_DIR).apply { mkdirs() }
+        val now = System.currentTimeMillis()
+        pending
+            .listFiles()
+            ?.filter { now - it.lastModified() > PENDING_TTL_MS }
+            ?.forEach { runCatching { it.delete() } }
+        val token = "pending-$now-" + Integer.toHexString((0..0xffff).random())
+        val target = File(pending, "$token.user.js")
+        val ok =
+            runCatching {
+                  source.copyTo(target, overwrite = true)
+                  true
+                }
+                .getOrDefault(false)
+        source.delete()
+        if (ok) Bundle().apply { putString("token", token) } else Bundle()
+      }
       "getResource" -> {
         val key = bundle.getString("key") ?: return Bundle()
         val file = ScriptFiles.privateResourceFile(context!!, key)
@@ -202,6 +223,8 @@ class ScriptContentProvider : ContentProvider() {
   private companion object {
     const val MAX_RESOURCE_BYTES = 512 * 1024
     const val SNAPSHOT_PREFIX = "script-snapshot-"
+    const val PENDING_DIR = "pending"
+    const val PENDING_TTL_MS = 24 * 60 * 60 * 1000L
 
     private val STATIC_SUFFIXES =
         listOf(
@@ -308,12 +331,18 @@ class ScriptContentProvider : ContentProvider() {
 
   /** Reads and removes a file the browser uploaded before calling upsert/migrate. */
   private fun readInbox(bundle: Bundle): String? {
-    val name = bundle.getString("path") ?: return null
-    val file = File(File(context!!.filesDir, "inbox"), safeSegment(name))
+    val file = inboxFile(bundle) ?: return null
     return runCatching { file.readText() }
         .onFailure { Log.d("Cannot read inbox file ${file.name}: ${it.message}") }
         .getOrNull()
         .also { file.delete() }
+  }
+
+  /** The uploaded inbox file, without reading it (staging copies it instead). */
+  private fun inboxFile(bundle: Bundle): File? {
+    val name = bundle.getString("path") ?: return null
+    val file = File(File(context!!.filesDir, "inbox"), safeSegment(name))
+    return file.takeIf { it.isFile }
   }
 
   private fun safeSegment(name: String): String = name.replace(Regex("[^A-Za-z0-9._-]"), "_")

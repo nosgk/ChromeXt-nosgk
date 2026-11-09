@@ -54,6 +54,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -150,30 +151,37 @@ fun ScriptListScreen(
         value = query
       }
 
-  // Rebuilding the lower-cased search corpus for every script on every toggle was expensive with
-  // large scripts; keep one entry per script and only rebuild it when the script changed.
-  val searchCache = remember { mutableMapOf<String, Pair<Long, String>>() }
-  val searchBlobs = remember(scripts) {
-    scripts.associate { script ->
-      val cached = searchCache[script.id]
-      if (cached != null && cached.first == script.lastUpdated) {
-        script.id to cached.second
-      } else {
-        val blob =
-            buildString {
-                  append(script.id)
-                  append('\n')
-                  append(script.description)
-                  append('\n')
-                  append(script.match.joinToString("\n"))
-                  append('\n')
-                  append(script.code)
-                }
-                .lowercase()
-        searchCache[script.id] = script.lastUpdated to blob
-        script.id to blob
-      }
-    }
+  // Building the lower-cased search corpus (which includes the whole script body) on the UI
+  // thread made opening a list with an 800 KB script janky. Build it on Dispatchers.Default and
+  // reuse one entry per unchanged script; filtering falls back to the light metadata until the
+  // corpus is ready.
+  val searchCache =
+      remember { java.util.concurrent.ConcurrentHashMap<String, Pair<Long, String>>() }
+  var searchBlobs by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+  LaunchedEffect(scripts) {
+    searchBlobs =
+        withContext(Dispatchers.Default) {
+          scripts.associate { script ->
+            val cached = searchCache[script.id]
+            if (cached != null && cached.first == script.lastUpdated) {
+              script.id to cached.second
+            } else {
+              val blob =
+                  buildString {
+                        append(script.id)
+                        append('\n')
+                        append(script.description)
+                        append('\n')
+                        append(script.match.joinToString("\n"))
+                        append('\n')
+                        append(script.code)
+                      }
+                      .lowercase()
+              searchCache[script.id] = script.lastUpdated to blob
+              script.id to blob
+            }
+          }
+        }
   }
 
   val visible = remember(scripts, searchBlobs, debouncedQuery, filter, sort, appFilter, activeUrl) {
@@ -181,7 +189,13 @@ fun ScriptListScreen(
     scripts
         .asSequence()
         .filter { appFilter == null || it.appliesTo(appFilter) }
-        .filter { needle.isEmpty() || searchBlobs[it.id]?.contains(needle) == true }
+        .filter { script ->
+          needle.isEmpty() ||
+              (searchBlobs[script.id]?.contains(needle)
+                  ?: (script.id.lowercase().contains(needle) ||
+                      script.description.lowercase().contains(needle) ||
+                      script.match.any { rule -> rule.lowercase().contains(needle) }))
+        }
         .filter {
           when (filter) {
             ScriptFilter.ALL -> true

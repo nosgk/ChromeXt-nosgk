@@ -51,6 +51,7 @@ object ScriptDbManager {
 
   private val pendingActivations = ConcurrentHashMap<String, Long>()
   private val hydrationAttempts = ConcurrentHashMap<String, Long>()
+  private val parseCache = ConcurrentHashMap<String, Pair<String, Script>>()
 
   /** Engine switches pulled from the central config table; defaults match pre-3.10 behavior. */
   @Volatile var engine = EngineConfig()
@@ -379,7 +380,17 @@ object ScriptDbManager {
     }
   }
 
-  private fun parseRecord(record: ScriptRecord): Script? = record.toScript()
+  private fun parseRecord(record: ScriptRecord): Script? {
+    val source = record.meta + record.code
+    val cached = parseCache[record.id]
+    val parsed =
+        if (cached != null && cached.first == source) cached.second
+        else
+            parseScript(source, record.storage, hydrateRequires = false)
+                ?.takeIf { it.id == record.id }
+                ?.also { parseCache[record.id] = source to it }
+    return parsed?.withRecord(record)
+  }
 
   // ---------------------------------------------------------------------------------------------
   // Browser-local cache. The central database is authoritative; this file only keeps injection

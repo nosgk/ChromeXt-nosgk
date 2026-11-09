@@ -1,7 +1,6 @@
 package org.matrix.chromext.ui
 
 import android.content.Context
-import org.json.JSONObject
 import org.matrix.chromext.script.EngineConfig
 import org.matrix.chromext.script.HookedApp
 import org.matrix.chromext.script.Script
@@ -11,11 +10,10 @@ import org.matrix.chromext.script.ScriptHydrator
 import org.matrix.chromext.script.ScriptRecord
 import org.matrix.chromext.script.ScriptStats
 import org.matrix.chromext.script.ScriptStore
-import org.matrix.chromext.script.parseApps
-import org.matrix.chromext.script.parseLib
-import org.matrix.chromext.script.parseResources
 import org.matrix.chromext.script.parseScript
 import org.matrix.chromext.script.toRecord
+import org.matrix.chromext.script.toScript
+import org.matrix.chromext.script.withRecord
 
 /**
  * Manager-side access to the central database. The manager runs in the module process, so it uses
@@ -153,26 +151,6 @@ class ScriptRepository(context: Context) {
             parseScript(source, record.storage, hydrateRequires = false)?.also {
               parseCache[record.id] = source to it
             }
-    if (parsed == null) return null
-    // Fields that can change without the source text still come from the row.
-    val storage =
-        if (parsed.storage != null) {
-          record.storage?.let { runCatching { JSONObject(it) }.getOrNull() } ?: JSONObject()
-        } else null
-    return parsed.copy(
-        enabled = record.enabled,
-        sortOrder = record.sortOrder,
-        customMatch = record.customMatch,
-        customInclude = record.customInclude,
-        customExclude = record.customExclude,
-        customRunAt = record.customRunAt,
-        updateUrl = record.updateUrl,
-        iconUrl = record.iconUrl,
-        lastUpdated = record.lastUpdated,
-        apps = parseApps(record.apps),
-        lib = parseLib(record.lib),
-        resources = parseResources(record.resources),
-        storage = storage,
-    )
+    return parsed?.withRecord(record)
   }
 }

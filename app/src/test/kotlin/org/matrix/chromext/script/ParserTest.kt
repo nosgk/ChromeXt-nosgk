@@ -142,4 +142,19 @@ class ParserTest {
     assertEquals("image/png", script.resources[1].mime)
     assertNull(script.resources[0].data)
   }
+
+  @Test
+  fun parsesLargeScriptBodies() {
+    val body = "console.log('line');\n".repeat(50_000)
+    val input =
+        "// ==UserScript==\n" +
+            "// @name Large\n" +
+            "// @match https://example.com/*\n" +
+            "// ==/UserScript==\n" +
+            body
+    val script = parseScript(input)!!
+    assertEquals("ChromeXt:Large", script.id)
+    assertEquals(body.length, script.code.length)
+    assertEquals(input.length, (script.meta + script.code).length)
+  }
 }

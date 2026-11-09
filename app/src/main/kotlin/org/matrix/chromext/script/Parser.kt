@@ -7,20 +7,44 @@ import java.net.URL
 import kotlin.text.Regex
 import org.json.JSONObject
 
-private val blocksReg =
-    Regex(
-        """(?<metablock>[\S\s]*?// ==UserScript==\r?\n[\S\s]*?\r?\n// ==/UserScript==\s*)(?<code>[\S\s]*)""")
+private const val START_MARKER = "// ==UserScript=="
+private const val END_MARKER = "// ==/UserScript=="
+
 private val metaReg = Regex("""^//\s+@(?<key>[\w-]+)(\s+(?<value>.+))?""")
+
+/**
+ * Splits the metadata block from the body with `indexOf`. The previous regular expression used
+ * lazy `[\S\s]*?` quantifiers over the whole script; on an 800 KB script that backtracking cost
+ * was a large part of the loading time.
+ */
+private fun splitBlocks(input: String): Pair<String, String>? {
+  var start = input.indexOf(START_MARKER)
+  while (start >= 0) {
+    val afterStart = start + START_MARKER.length
+    if (afterStart >= input.length || input[afterStart] == '\n' || input[afterStart] == '\r') {
+      break
+    }
+    start = input.indexOf(START_MARKER, afterStart)
+  }
+  if (start < 0) return null
+  var end = input.indexOf(END_MARKER, start + START_MARKER.length)
+  while (end >= 0 && end > 0 && input[end - 1] != '\n') {
+    end = input.indexOf(END_MARKER, end + END_MARKER.length)
+  }
+  if (end < 0) return null
+  var metaEnd = end + END_MARKER.length
+  while (metaEnd < input.length && input[metaEnd].isWhitespace()) metaEnd++
+  // Keep any prefix (BOM, leading comment) in the metadata block so meta + code reproduces the
+  // original text exactly, matching the previous regular expression.
+  return input.substring(0, metaEnd) to input.substring(metaEnd)
+}
 
 fun parseScript(
     input: String,
     storage: String? = null,
     @Suppress("UNUSED_PARAMETER") hydrateRequires: Boolean = false,
 ): Script? {
-  val blockMatchGroup = blocksReg.matchEntire(input)?.groups
-  if (blockMatchGroup == null) {
-    return null
-  }
+  val blocks = splitBlocks(input) ?: return null
 
   val script =
       object {
@@ -37,8 +61,8 @@ fun parseScript(
         var iconUrl = ""
         var updateUrl = ""
         var runAt = ""
-        val meta = (blockMatchGroup[1]?.value as String)
-        val code = blockMatchGroup[2]?.value as String
+        val meta = blocks.first
+        val code = blocks.second
         var storage: JSONObject? = null
         var noframes = false
       }

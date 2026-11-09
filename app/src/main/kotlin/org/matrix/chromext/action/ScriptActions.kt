@@ -24,49 +24,54 @@ object ScriptActions : ActionGroup {
                   callback = "alert('${invalidScriptMessage()}');"
                 } else {
                   Log.i("Install script ${script.id}")
-                  val existing = ScriptDbManager.scripts.find { it.id == script.id }
-                  val currentPackage = Chrome.packageName
-                  val toInsert =
-                      if (existing == null) {
-                        // Installed from this app: scope it here instead of enabling it globally.
-                        script.copy(apps = listOfNotNull(currentPackage))
-                      } else {
-                        // Re-installing keeps the user's enable state, ordering and overrides, and
-                        // adds the app it was installed from to a non-global scope.
-                        val apps =
-                            if (existing.apps.isNotEmpty() &&
-                                currentPackage != null &&
-                                currentPackage !in existing.apps) {
-                              existing.apps + currentPackage
-                            } else {
-                              existing.apps
-                            }
-                        script.copy(
-                            enabled = existing.enabled,
-                            sortOrder = existing.sortOrder,
-                            customMatch = existing.customMatch,
-                            customInclude = existing.customInclude,
-                            customExclude = existing.customExclude,
-                            customRunAt = existing.customRunAt,
-                            apps = apps,
-                            lib = existing.lib,
-                            resources = existing.resources,
-                        )
-                      }
-                  // Install first. A blocked background activity start (ColorOS and other OEM
-                  // restrictions) must not lose the script; the native screen is only a review
-                  // step now.
-                  if (!ScriptDbManager.insert(toInsert)) {
-                    callback = "alert('${installFailedMessage()}');"
+                  val ctx = runCatching { Chrome.getContext() }.getOrNull()
+                  if (ScriptDbManager.engine.installConfirm && ctx != null) {
+                    // Confirmation is mandatory: stage the payload and open the manager screen.
+                    // Nothing reaches the script library until the user taps 安装 there, and only
+                    // the token travels in the Intent, so large scripts work too.
+                    val token = CentralBridge.stageInstall(context.payload)
+                    if (token == null) {
+                      callback = "alert('${stageFailedMessage()}');"
+                    } else if (!ManagerLauncher.installScript(ctx, token)) {
+                      // Background-activity limits can drop the direct start; the notification
+                      // opens the same confirmation screen from a tap.
+                      ManagerLauncher.notifyPendingInstall(ctx, token)
+                      callback = "alert('${openManagerMessage()}');"
+                    }
                   } else {
-                    // @require/@resource payloads are downloaded in the module process, which owns
-                    // the network permission and the resources directory.
-                    Chrome.IO.submit { CentralBridge.hydrate(script.id) }
-                    if (ScriptDbManager.engine.installConfirm) {
-                      val ctx = runCatching { Chrome.getContext() }.getOrNull()
-                      if (ctx != null && !ManagerLauncher.installScript(ctx, context.payload)) {
-                        ManagerLauncher.notifyInstalled(ctx, toInsert.id)
-                      }
+                    val existing = ScriptDbManager.scripts.find { it.id == script.id }
+                    val currentPackage = Chrome.packageName
+                    val toInsert =
+                        if (existing == null) {
+                          // Installed from this app: scope it here instead of enabling it globally.
+                          script.copy(apps = listOfNotNull(currentPackage))
+                        } else {
+                          // Re-installing keeps the user's enable state, ordering and overrides,
+                          // and adds the app it was installed from to a non-global scope.
+                          val apps =
+                              if (existing.apps.isNotEmpty() &&
+                                  currentPackage != null &&
+                                  currentPackage !in existing.apps) {
+                                existing.apps + currentPackage
+                              } else {
+                                existing.apps
+                              }
+                          script.copy(
+                              enabled = existing.enabled,
+                              sortOrder = existing.sortOrder,
+                              customMatch = existing.customMatch,
+                              customInclude = existing.customInclude,
+                              customExclude = existing.customExclude,
+                              customRunAt = existing.customRunAt,
+                              apps = apps,
+                              lib = existing.lib,
+                              resources = existing.resources,
+                          )
+                        }
+                    if (!ScriptDbManager.insert(toInsert)) {
+                      callback = "alert('${installFailedMessage()}');"
+                    } else {
+                      Chrome.IO.submit { CentralBridge.hydrate(script.id) }
                     }
                   }
                 }
@@ -164,4 +169,11 @@ object ScriptActions : ActionGroup {
 
   private fun installFailedMessage(): String =
       if (chinese()) "安装失败：无法写入脚本库" else "Install failed: cannot write to the script library"
+
+  private fun stageFailedMessage(): String =
+      if (chinese()) "无法暂存脚本，请重试" else "Could not stage the script; please try again"
+
+  private fun openManagerMessage(): String =
+      if (chinese()) "无法直接打开管理面板，请点通知完成安装"
+      else "Could not open the manager directly; use the notification to finish"
 }

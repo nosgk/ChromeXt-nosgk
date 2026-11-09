@@ -99,6 +99,16 @@ object CentralBridge {
     return call("hydrateScript", extras)?.getBoolean("ok") == true
   }
 
+  /**
+   * Stores an install payload in the module's private directory and returns the token the manager
+   * screen reads it by. Large scripts cannot travel through an Intent extra.
+   */
+  fun stageInstall(payload: String): String? {
+    val name = writeInbox(payload) ?: return null
+    val extras = Bundle().apply { putString("path", name) }
+    return call("stageInstall", extras)?.getString("token")
+  }
+
   fun getResource(key: String): CachedResource? {
     val bundle = call("getResource", Bundle().apply { putString("key", key) }) ?: return null
     val data = bundle.getByteArray("data") ?: return null

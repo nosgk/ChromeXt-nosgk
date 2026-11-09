@@ -41,6 +41,9 @@ jobs:
         with:
           cache-read-only: false
 
+      - name: Validate (temporary)
+        run: ./gradlew --no-daemon ktfmtFormat testDebugUnitTest
+
       - name: Build release
         run: ./gradlew --no-daemon assembleRelease
 

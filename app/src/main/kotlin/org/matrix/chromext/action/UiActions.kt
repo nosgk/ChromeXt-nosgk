@@ -60,11 +60,13 @@ object UiActions : ActionGroup {
                   callback = "console.error('notification API requires Android Oreo')"
                 } else {
                   val detail = JSONObject(context.payload)
-                  val id = detail.getString("id")
-                  val uuid = detail.getInt("uuid")
-                  val title = detail.getString("title")
-                  val text = detail.getString("text")
-                  val timeout = detail.getLong("timeout")
+                  val id = detail.optString("id")
+                  val uuid = detail.optInt("uuid")
+                  // Tampermonkey allows a missing title or text; the previous getString() threw
+                  // and the notification silently disappeared.
+                  val title = detail.optString("title", "")
+                  val text = detail.optString("text", "")
+                  val timeout = detail.optLong("timeout", 10_000L)
                   val ctx = Chrome.getContext()
                   var channel = "xposed_notification"
                   if (detail.optBoolean("silent")) channel += "_slient"
@@ -83,7 +85,7 @@ object UiActions : ActionGroup {
                   if (detail.optBoolean("onclick")) {
                     builder.setContentIntent(
                         ScriptNotification.newIntent(id, uuid, context.frameId))
-                    ActionState.tabNotification.put(uuid, context.tab!!)
+                    context.tab?.let { ActionState.tabNotification.put(uuid, it) }
                   }
                   val notificationManager =
                       ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -96,13 +98,16 @@ object UiActions : ActionGroup {
                         builder.setLargeIcon(Icon.createWithBitmap(bitmap))
                       }
                           .onFailure { Log.d("Fail to set notification image: ${it.message}") }
-                      notificationManager.notify(id, uuid, builder.build())
+                      runCatching { notificationManager.notify(id, uuid, builder.build()) }
+                          .onFailure { Log.d("GM_notification failed: ${it.message}") }
                     }
                   } else {
-                    notificationManager.notify(id, uuid, builder.build())
+                    runCatching { notificationManager.notify(id, uuid, builder.build()) }
+                        .onFailure { Log.d("GM_notification failed: ${it.message}") }
                   }
-                  if (detail.optBoolean("highlight"))
-                      (ctx as Activity).getWindow().decorView.requestFocus()
+                  if (detail.optBoolean("highlight")) {
+                    (ctx as? Activity)?.window?.decorView?.requestFocus()
+                  }
                 }
                 callback
               },

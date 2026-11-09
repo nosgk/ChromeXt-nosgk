@@ -40,6 +40,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -50,21 +51,33 @@ import org.matrix.chromext.script.parseScript
 
 class InstallScriptActivity : ComponentActivity() {
 
+  private var stagedToken: String? = null
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     val uri = intent?.data
     val provided = intent?.getStringExtra(EXTRA_SCRIPT)
+    val token = intent?.getStringExtra(EXTRA_TOKEN)
     val sourcePackage = intent?.getStringExtra(EXTRA_PACKAGE)
+    stagedToken = token
     setContent {
       ChromeXtTheme(ThemePrefs.load(this)) {
         Surface {
           InstallScriptScreen(
               uri = uri,
               provided = provided,
+              token = token,
               sourcePackage = sourcePackage,
-              onCancel = { finish() },
-              onInstalled = { finish() },
+              onCancel = {
+                discardStaged(this, token)
+                finish()
+              },
+              onInstalled = {
+                discardStaged(this, token)
+                finish()
+              },
               onEdit = { script ->
+                discardStaged(this, token)
                 startActivity(
                     Intent(this, MainActivity::class.java)
                         .putExtra(MainActivity.EXTRA_EDIT_ID, script.id))
@@ -76,10 +89,19 @@ class InstallScriptActivity : ComponentActivity() {
     }
   }
 
+  override fun onDestroy() {
+    super.onDestroy()
+    // A back press finishes without going through the buttons; drop the staged payload so it does
+    // not linger (the provider also cleans files older than a day).
+    if (isFinishing) discardStaged(this, stagedToken)
+  }
+
   companion object {
     const val ACTION_INSTALL_SCRIPT = "org.matrix.chromext.ACTION_INSTALL_SCRIPT"
     const val EXTRA_SCRIPT = "script"
     const val EXTRA_PACKAGE = "source_package"
+    /** Token for a payload staged by the ContentProvider (used for large scripts). */
+    const val EXTRA_TOKEN = "install_token"
   }
 }
 
@@ -88,6 +110,7 @@ class InstallScriptActivity : ComponentActivity() {
 private fun InstallScriptScreen(
     uri: Uri?,
     provided: String?,
+    token: String?,
     sourcePackage: String?,
     onCancel: () -> Unit,
     onInstalled: () -> Unit,
@@ -115,7 +138,10 @@ private fun InstallScriptScreen(
         else -> existingApps
       }
 
-  LaunchedEffect(uri, provided) {
+  LaunchedEffect(uri, provided, token) {
+    if (text == null && token != null) {
+      text = withContext(Dispatchers.IO) { readStaged(context, token) }
+    }
     if (text == null && uri != null) {
       text = withContext(Dispatchers.IO) { readText(context, uri) }
     }
@@ -192,12 +218,26 @@ private fun InstallScriptScreen(
             stringResource(R.string.install_code_preview),
             style = MaterialTheme.typography.titleSmall,
         )
+        // Laying out an 800 KB script just to show 20 lines freezes the page; show a bounded
+        // prefix instead.
+        val preview =
+            remember(current.id, current.code) {
+              if (current.code.length <= MAX_PREVIEW_CHARS) current.code
+              else current.code.substring(0, MAX_PREVIEW_CHARS)
+            }
         Text(
-            current.code,
+            preview,
             style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
             maxLines = 20,
             overflow = TextOverflow.Ellipsis,
         )
+        if (current.code.length > MAX_PREVIEW_CHARS) {
+          Text(
+              stringResource(R.string.install_code_truncated, current.code.length),
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -240,6 +280,19 @@ private fun InstallScriptScreen(
 }
 
 private const val MAX_SCRIPT_BYTES = 4 * 1024 * 1024
+private const val MAX_PREVIEW_CHARS = 4000
+
+/** The provider keeps staged install payloads here; the Activity reads them by token. */
+private fun stagedFile(context: Context, token: String): File =
+    File(File(context.filesDir, "pending"), token.replace(Regex("[^A-Za-z0-9._-]"), "_"))
+
+private fun readStaged(context: Context, token: String): String? =
+    runCatching { stagedFile(context, token).takeIf { it.isFile }?.readText() }.getOrNull()
+
+private fun discardStaged(context: Context, token: String?) {
+  if (token == null) return
+  runCatching { stagedFile(context, token).delete() }
+}
 
 private fun readText(context: Context, uri: Uri): String? =
     runCatching {

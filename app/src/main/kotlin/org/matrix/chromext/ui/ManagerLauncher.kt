@@ -35,13 +35,16 @@ object ManagerLauncher {
     runCatching { context.startActivity(intent) }
   }
 
-  /** Returns false when the manager Activity cannot be started, so the caller can fall back. */
-  fun installScript(context: Context, script: String): Boolean =
+  /**
+   * Opens the native install confirmation screen for a staged payload. Only the token travels in
+   * the Intent, so scripts larger than the Binder limit can be confirmed too.
+   */
+  fun installScript(context: Context, token: String): Boolean =
       runCatching {
             val intent =
                 Intent().apply {
                   component = ComponentName(MODULE_PACKAGE, INSTALL_ACTIVITY)
-                  putExtra(InstallScriptActivity.EXTRA_SCRIPT, script)
+                  putExtra(InstallScriptActivity.EXTRA_TOKEN, token)
                   // Installing from a hooked app scopes the script to that app by default.
                   Chrome.packageName?.let {
                     putExtra(InstallScriptActivity.EXTRA_PACKAGE, it)
@@ -54,17 +57,17 @@ object ManagerLauncher {
           .getOrDefault(false)
 
   /**
-   * Posts a notification that opens the manager for [scriptId]. OEM background-activity limits can
-   * silently swallow a direct `startActivity` from a browser process; the notification gives the
-   * user a path that always works because it starts the activity from a tap.
+   * Posts a notification that opens the install confirmation screen. OEM background-activity
+   * limits can silently swallow a direct `startActivity`; a tap on the notification always starts
+   * the activity from a user gesture.
    */
-  fun notifyInstalled(context: Context, scriptId: String) {
+  fun notifyPendingInstall(context: Context, token: String) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
     runCatching {
           val intent =
               Intent().apply {
-                component = ComponentName(MODULE_PACKAGE, MAIN_ACTIVITY)
-                putExtra(MainActivity.EXTRA_EDIT_ID, scriptId)
+                component = ComponentName(MODULE_PACKAGE, INSTALL_ACTIVITY)
+                putExtra(InstallScriptActivity.EXTRA_TOKEN, token)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
               }
           val flags =
@@ -72,20 +75,20 @@ object ManagerLauncher {
                   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE
                   else 0
           val pending =
-              PendingIntent.getActivity(context, scriptId.hashCode(), intent, flags) ?: return
+              PendingIntent.getActivity(context, token.hashCode(), intent, flags) ?: return
           val chinese = Locale.getDefault().language.lowercase().startsWith("zh")
           val builder =
               Notification.Builder(context, CHANNEL)
                   .setContentTitle("ChromeXt")
                   .setContentText(
-                      if (chinese) "脚本已安装，点此打开管理面板"
-                      else "Script installed. Tap to open the manager.")
+                      if (chinese) "点此确认安装用户脚本"
+                      else "Tap to confirm the UserScript install.")
                   .setSmallIcon(Icon.createWithResource(MODULE_PACKAGE, R.drawable.ic_extension))
                   .setAutoCancel(true)
                   .setContentIntent(pending)
           val manager =
               context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-          manager.notify(scriptId.hashCode(), builder.build())
+          manager.notify(token.hashCode(), builder.build())
         }
         .onFailure { Log.d("Cannot post the install notification: ${it.message}") }
   }

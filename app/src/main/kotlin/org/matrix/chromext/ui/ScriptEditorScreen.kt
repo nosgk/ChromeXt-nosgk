@@ -95,6 +95,10 @@ fun ScriptEditorScreen(
   var updateInfo by remember(script.id) { mutableStateOf<UpdateInfo?>(null) }
   var pendingRemote by remember(script.id) { mutableStateOf<Script?>(null) }
 
+  // Counting newlines over a large script on every recomposition was noticeable; key it on the
+  // text instead.
+  val codeLineCount = remember(code) { code.count { it == '\n' } + 1 }
+
   fun save() {
     val storageJson =
         if (storage.isBlank()) {
@@ -195,7 +199,7 @@ fun ScriptEditorScreen(
                   Text(
                       stringResource(
                           R.string.editor_code_summary,
-                          code.count { it == '\n' } + 1,
+                          codeLineCount,
                           code.length),
                       style = MaterialTheme.typography.bodySmall,
                       color = MaterialTheme.colorScheme.onSurfaceVariant,

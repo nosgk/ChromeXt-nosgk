@@ -165,6 +165,7 @@
 	<string name="install_target_sites">Target sites</string>
 	<string name="install_permissions">Permissions</string>
 	<string name="install_code_preview">Code preview</string>
+	<string name="install_code_truncated">Preview truncated; the full script is %1$d characters.</string>
 	<string name="install_author">Author: %1$s</string>
 	<string name="install_version">v%1$s</string>
 	<string name="install_version_diff">v%1$s → v%2$s</string>
@@ -176,6 +177,11 @@
 	<!-- Code editor -->
 	<string name="code_editor_title">Code editor</string>
 	<string name="code_editor_stats">%1$d lines · %2$d chars · Ln %3$d, Col %4$d</string>
+	<string name="code_editor_viewer_stats">%1$d lines · %2$d chars · read-only</string>
+	<string name="code_editor_edit">Edit</string>
+	<string name="code_editor_large_edit_title">Edit a large script?</string>
+	<string name="code_editor_large_edit_body">The script is about %1$d characters; the Compose text field may lag. The read-only viewer is unaffected.</string>
+	<string name="code_editor_large_edit_confirm">Edit anyway</string>
 	<string name="code_editor_find">Find</string>
 	<string name="code_editor_replace">Replace with</string>
 	<string name="code_editor_next">Next</string>
@@ -294,7 +300,7 @@
 	<string name="import_match_count">%1$d match rules</string>
 	<string name="import_confirm">Import %1$d</string>
 	<string name="import_invalid_hint">%1$d more rows could not be parsed and will be skipped.</string>
-	<string name="install_already_saved">Already saved to the script library; confirm, edit or disable it here.</string>
+	<string name="install_already_saved">A script with this id already exists; tapping Install updates it.</string>
 	<string name="toggle_saved">Saved; the browser applies it on the next page load</string>
 	<string name="toggle_failed">Save failed. Make sure the module process is not restricted.</string>
 	<string name="script_activated">Activated · %1$s · %2$s</string>
