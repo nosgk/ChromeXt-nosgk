@@ -72,6 +72,14 @@ data class AppEntry(
     val scoped: Boolean,
 )
 
+/** Package metadata that does not change between panel refreshes. */
+class AppsCache {
+  var launchable: List<String>? = null
+  val icons = mutableMapOf<String, ImageBitmap?>()
+  val labels = mutableMapOf<String, String>()
+  val versions = mutableMapOf<String, String?>()
+}
+
 /**
  * Collects everything the apps screen and the script editor need: every launchable app (for
  * scoping), plus packages that reported in, are in the framework scope, or are referenced by a
@@ -82,6 +90,7 @@ fun loadApps(
     hooked: List<HookedApp>,
     scripts: List<Script>,
     scoped: Set<String>,
+    cache: AppsCache = AppsCache(),
 ): List<AppEntry> {
   val packageManager = context.packageManager
   val active = hooked.associateBy { it.packageName }
@@ -92,13 +101,19 @@ fun loadApps(
   packages += scoped
   packages += scriptScopes
   packages += BrowserCatalog.xposedScope
-  runCatching { packageManager.getInstalledApplications(0) }
-      .getOrDefault(emptyList())
-      .forEach { info ->
-        if (packageManager.getLaunchIntentForPackage(info.packageName) != null) {
-          packages += info.packageName
-        }
-      }
+  // Resolving launchable apps and icons for the whole device is the slow part of a refresh; do it
+  // once per panel session and reuse the results.
+  val launchable =
+      cache.launchable
+          ?: runCatching {
+                packageManager
+                    .getInstalledApplications(0)
+                    .filter { packageManager.getLaunchIntentForPackage(it.packageName) != null }
+                    .map { it.packageName }
+              }
+              .getOrDefault(emptyList())
+              .also { cache.launchable = it }
+  packages += launchable
   packages -= context.packageName
   packages -= "android"
 
@@ -106,19 +121,32 @@ fun loadApps(
       .map { packageName ->
         val info = runCatching { packageManager.getApplicationInfo(packageName, 0) }.getOrNull()
         val label =
-            info?.let { runCatching { packageManager.getApplicationLabel(it).toString() }.getOrNull() }
-        val version =
-            runCatching { packageManager.getPackageInfo(packageName, 0).versionName }.getOrNull()
-        val icon =
-            info?.let {
-              runCatching {
-                    packageManager.getApplicationIcon(it).toIconBitmap(64).asImageBitmap()
+            cache.labels.getOrPut(packageName) {
+              info?.let {
+                    runCatching { packageManager.getApplicationLabel(it).toString() }.getOrNull()
                   }
-                  .getOrNull()
+                  ?.takeIf { it.isNotBlank() } ?: packageName
             }
+        val version =
+            if (cache.versions.containsKey(packageName)) cache.versions[packageName]
+            else
+                runCatching { packageManager.getPackageInfo(packageName, 0).versionName }
+                    .getOrNull()
+                    .also { cache.versions[packageName] = it }
+        val icon =
+            if (cache.icons.containsKey(packageName)) cache.icons[packageName]
+            else
+                info
+                    ?.let {
+                      runCatching {
+                            packageManager.getApplicationIcon(it).toIconBitmap(64).asImageBitmap()
+                          }
+                          .getOrNull()
+                    }
+                    .also { cache.icons[packageName] = it }
         AppEntry(
             packageName = packageName,
-            label = label?.takeIf { it.isNotBlank() } ?: packageName,
+            label = label,
             versionName = version.orEmpty(),
             icon = icon,
             active = active.containsKey(packageName),

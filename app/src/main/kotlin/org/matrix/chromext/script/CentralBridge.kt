@@ -14,6 +14,8 @@ import org.matrix.chromext.Chrome
  * Bundle: the provider exposes files through `openFile()` and the browser reads/writes them
  * directly.
  */
+data class CachedResource(val bytes: ByteArray, val modified: Long)
+
 object CentralBridge {
   private const val AUTHORITY = "content://org.matrix.chromext.scripts"
   private val uri = Uri.parse(AUTHORITY)
@@ -24,12 +26,6 @@ object CentralBridge {
 
   private fun inboxUri(name: String): Uri =
       Uri.parse(AUTHORITY).buildUpon().appendPath("inbox").appendPath(name).build()
-
-  private fun resourceUri(key: String): Uri {
-    val builder = Uri.parse(AUTHORITY).buildUpon().appendPath("resource")
-    key.split('/').filter { it.isNotEmpty() }.forEach { builder.appendPath(it) }
-    return builder.build()
-  }
 
   /** Writes [json] into the provider's inbox; the returned name is passed as `path`. */
   private fun writeInbox(json: String): String? {
@@ -103,13 +99,11 @@ object CentralBridge {
     return call("hydrateScript", extras)?.getBoolean("ok") == true
   }
 
-  fun getResource(key: String): ByteArray? =
-      runCatching {
-            Chrome.getContext().contentResolver.openInputStream(resourceUri(key))?.use {
-              it.readBytes()
-            }
-          }
-          .getOrNull()
+  fun getResource(key: String): CachedResource? {
+    val bundle = call("getResource", Bundle().apply { putString("key", key) }) ?: return null
+    val data = bundle.getByteArray("data") ?: return null
+    return CachedResource(data, bundle.getLong("modified"))
+  }
 
   fun putResource(key: String, bytes: ByteArray, mime: String = ""): Boolean {
     val extras =

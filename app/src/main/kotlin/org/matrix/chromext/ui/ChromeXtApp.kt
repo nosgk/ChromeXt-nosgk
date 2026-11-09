@@ -89,6 +89,9 @@ fun ChromeXtApp(
   DisposableEffect(Unit) { onDispose { repository.close() } }
   val scope = rememberCoroutineScope()
   val snackbar = remember { SnackbarHostState() }
+  // Package icons/labels and the LSPosed scope are expensive (PackageManager + su) and do not
+  // change between panel refreshes, so they are loaded once per panel session.
+  val appsCache = remember { AppsCache() }
 
   var scripts by remember { mutableStateOf<List<Script>>(emptyList()) }
   var hookedApps by remember { mutableStateOf<List<HookedApp>>(emptyList()) }
@@ -124,7 +127,7 @@ fun ChromeXtApp(
                 scripts = loadedScripts,
                 hooked = loadedHooked,
                 activations = loadedActivations,
-                apps = loadApps(context, loadedHooked, loadedScripts, scopeRead.packages),
+                apps = loadApps(context, loadedHooked, loadedScripts, scopeRead.packages, appsCache),
                 scope = scopeRead,
             )
           }
@@ -161,7 +164,6 @@ fun ChromeXtApp(
 
   fun refresh() {
     refreshing = true
-    LsposedScope.invalidate()
     reload += 1
   }
 

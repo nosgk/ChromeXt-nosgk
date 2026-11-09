@@ -1070,7 +1070,7 @@ GM.bootstrap = () => {
   for (const it of [
     "include",
     "match",
-    "exlcude",
+    "exclude",
     "require",
     "grant",
     "connect",
@@ -1079,7 +1079,9 @@ GM.bootstrap = () => {
     const plural = it.endsWith("h") ? it + "es" : it + "s";
     meta[plural] = typeof meta[it] == "string" ? [meta[it]] : meta[it] || [];
     if (it != "resource") Object.freeze(meta[plural]);
-    delete meta[it];
+    // Tampermonkey exposes both the singular directive and the plural list; keep the alias so
+    // scripts reading GM_info.script.grant / .match / .require keep working.
+    meta[it] = meta[plural];
   }
   meta.resources = meta.resources.map((res) => {
     const split = res.split(/\s+/).filter((it) => it.length > 0);

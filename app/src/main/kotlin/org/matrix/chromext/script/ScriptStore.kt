@@ -134,6 +134,9 @@ fun ScriptRecord.toScript(): Script? {
 /** Mirrored `.user.js` document in the public Download directory. */
 data class MirrorEntry(val scriptId: String, val uri: String, val path: String)
 
+/** Aggregate numbers for the settings telemetry, without reading every script body. */
+data class ScriptStats(val total: Int, val enabled: Int, val storageBytes: Long)
+
 /** Thin CRUD over the `script` table, usable from both the browser and the provider process. */
 class ScriptStore(context: Context) {
 
@@ -184,6 +187,24 @@ class ScriptStore(context: Context) {
   }
 
   fun record(id: String): ScriptRecord? = records().firstOrNull { it.id == id }
+
+  fun stats(): ScriptStats {
+    var total = 0
+    var enabled = 0
+    var storageBytes = 0L
+    helper.readableDatabase
+        .query("script", arrayOf("enabled", "storage"), null, null, null, null, null)
+        .use { cursor ->
+          while (cursor.moveToNext()) {
+            total += 1
+            if (cursor.getInt(0) != 0) enabled += 1
+            if (!cursor.isNull(1)) {
+              storageBytes += cursor.getString(1).toByteArray(Charsets.UTF_8).size
+            }
+          }
+        }
+    return ScriptStats(total, enabled, storageBytes)
+  }
 
   fun upsert(record: ScriptRecord): Boolean {
     val db = helper.writableDatabase
@@ -281,6 +302,20 @@ class ScriptStore(context: Context) {
           if (versionName.isNotBlank()) put("version_name", versionName)
         }
     return db.update("hooked_app", update, "package_name = ?", arrayOf(packageName)) > 0
+  }
+
+  /**
+   * Whether the module has been injected into [packageName] at least once. Used by the provider to
+   * let WebView hosts outside the browser catalog (for example a scoped note-taking app) read the
+   * central scripts, which is required now that browsers no longer keep a local copy.
+   */
+  fun isHookedApp(packageName: String): Boolean {
+    if (packageName.isBlank()) return false
+    val cursor =
+        helper.readableDatabase.query(
+            "hooked_app", arrayOf("package_name"), "package_name = ?", arrayOf(packageName), null,
+            null, null)
+    return cursor.use { it.moveToFirst() }
   }
 
   fun config(): Map<String, String> {

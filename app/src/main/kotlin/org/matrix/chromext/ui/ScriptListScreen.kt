@@ -150,19 +150,29 @@ fun ScriptListScreen(
         value = query
       }
 
+  // Rebuilding the lower-cased search corpus for every script on every toggle was expensive with
+  // large scripts; keep one entry per script and only rebuild it when the script changed.
+  val searchCache = remember { mutableMapOf<String, Pair<Long, String>>() }
   val searchBlobs = remember(scripts) {
     scripts.associate { script ->
-      script.id to
-          buildString {
-                append(script.id)
-                append('\n')
-                append(script.description)
-                append('\n')
-                append(script.match.joinToString("\n"))
-                append('\n')
-                append(script.code)
-              }
-              .lowercase()
+      val cached = searchCache[script.id]
+      if (cached != null && cached.first == script.lastUpdated) {
+        script.id to cached.second
+      } else {
+        val blob =
+            buildString {
+                  append(script.id)
+                  append('\n')
+                  append(script.description)
+                  append('\n')
+                  append(script.match.joinToString("\n"))
+                  append('\n')
+                  append(script.code)
+                }
+                .lowercase()
+        searchCache[script.id] = script.lastUpdated to blob
+        script.id to blob
+      }
     }
   }
 

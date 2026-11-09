@@ -46,6 +46,7 @@ object LsposedScope {
 
   private const val MODULE_PACKAGE = "org.matrix.chromext"
   private const val DB_NAME = "modules_config.db"
+  private const val CACHE_TTL_MS = 5 * 60_000L
 
   private val CANDIDATES =
       listOf(
@@ -58,13 +59,15 @@ object LsposedScope {
       )
 
   @Volatile private var cached: ScopeResult? = null
+  @Volatile private var cachedAt = 0L
 
   fun invalidate() {
     cached = null
   }
 
   fun read(context: Context): ScopeResult {
-    cached?.let { return it }
+    val now = System.currentTimeMillis()
+    cached?.let { if (now - cachedAt < CACHE_TTL_MS) return it }
     val result =
         runCatching { readUncached(context) }
             .getOrElse {
@@ -72,6 +75,7 @@ object LsposedScope {
               ScopeResult(status = ScopeStatus.DB_ERROR, detail = it.message.orEmpty())
             }
     cached = result
+    cachedAt = now
     return result
   }
 
@@ -117,8 +121,22 @@ object LsposedScope {
 
   private fun discoverPaths(): List<String> {
     val found = linkedSetOf<String>()
-    val su = Su.path()
-    if (su != null) {
+    val su = Su.path() ?: return CANDIDATES
+    // The known locations cover every current framework (LSPosed, Vector, APatch). Checking them
+    // is one short su call; the previous unconditional `find /data/adb` walked every module and
+    // was the slowest part of opening the manager.
+    runCatching {
+      val script = CANDIDATES.joinToString("\n") { "[ -f $it ] && echo $it" }
+      val process = ProcessBuilder(su, "-c", script).redirectErrorStream(true).start()
+      if (process.waitFor(3, TimeUnit.SECONDS)) {
+        process.inputStream.bufferedReader().useLines { lines ->
+          lines.map { it.trim() }.filter { it.startsWith("/") }.forEach { found += it }
+        }
+      } else {
+        process.destroy()
+      }
+    }
+    if (found.isEmpty()) {
       runCatching {
         val process =
             ProcessBuilder(su, "-c", "find /data/adb -name $DB_NAME 2>/dev/null")

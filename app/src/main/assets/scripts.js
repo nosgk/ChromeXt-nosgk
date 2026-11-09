@@ -312,6 +312,16 @@ if (typeof Symbol.ChromeXt == "undefined") {
   const userDefinedChromeXt = Symbol.ChromeXt;
   Object.freeze(ChromeXt);
   Symbol.ChromeXt = ChromeXt;
+  // Userscript menu extractors (for example greasyfork script 564114) scan window symbols for an
+  // object with a `commands` array. Exposing only that list lets them collect menu entries even
+  // when they were registered before the extractor patched Array.prototype.push. The target itself
+  // stays locked, so this grants no API access.
+  try {
+    Object.defineProperty(window, Symbol.for("ChromeXt"), {
+      value: { commands: ChromeXt.commands },
+      configurable: true,
+    });
+  } catch (e) {}
 } else {
   throw Error("ChromeXt is already defined, cancel initialization");
 }

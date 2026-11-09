@@ -65,3 +65,14 @@ test("GM.js reports real activation and consumes local resources", () => {
   assert.match(text, /resourceData/);
   assert.match(text, /URL\.createObjectURL/);
 });
+
+test("GM.js keeps Tampermonkey metadata aliases", () => {
+  const text = read("app/src/main/assets/GM.js");
+  assert.match(text, /meta\[it\] = meta\[plural\]/);
+});
+
+test("scripts.js exposes menu commands to extractors", () => {
+  const text = read("app/src/main/assets/scripts.js");
+  assert.match(text, /Symbol\.for\("ChromeXt"\)/);
+  assert.match(text, /commands: ChromeXt\.commands/);
+});

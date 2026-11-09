@@ -69,4 +69,12 @@ class UrlTest {
     assertTrue(isUserScript("https://example.com/demo.js?raw=1"))
     assertFalse(isUserScript("https://example.com/page.html?file=demo.user.js"))
   }
+
+  @Test
+  fun supportsTampermonkeyWildcardDirectives() {
+    assertTrue(matching(script(arrayOf("<all_urls>")), "https://example.com/page"))
+    assertTrue(matching(script(arrayOf("*")), "https://example.com/page"))
+    assertFalse(matching(script(arrayOf("<all_urls>")), "chrome://settings"))
+    assertTrue(matching(script(arrayOf("*://*/*")), "https://example.com/page"))
+  }
 }

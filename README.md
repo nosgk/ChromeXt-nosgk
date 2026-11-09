@@ -198,6 +198,17 @@ node --test tools/js-tests/*.test.js
 - **应用页需要读取已安装应用列表**：为支持把脚本限定到任意宿主，模块声明了 `QUERY_ALL_PACKAGES`；应用页只会展示应用名称、包名、版本与图标。
 - **AI 生成的代码**：这是本分支最需要你警惕的一条，见开头的警告。
 
+## 3.15.1 更新内容
+
+- 修复非浏览器目录内的 WebView 宿主（例如手动加入 Xposed 作用域的笔记类应用）脚本不生效：Provider 现在也接受模块确实注入过的包（`hooked_app`，按包归属校验），不再只认浏览器目录。
+- 修复旧安装的脚本丢失 `@require` 库：浏览器发现 `lib` 为空且元数据声明了 `@require` 时会请求模块补下载（每 10 分钟最多一次），管理面板启动时也会补。
+- `GM_info.script` 恢复 Tampermonkey 兼容的单数别名（`grant`/`match`/`include`/`exclude`/`require`/`connect`），并修复 `excludes` 拼写错误导致的缺失。
+- 支持 `<all_urls>` 与裸 `*` 的 `@match`/`@include`。
+- 运行时 GET 缓存 24 小时内视为新鲜；过期条目仍立即返回，同时在后台静默刷新，避免接口类 URL 永久返回旧数据。
+- `document-start` 时 tab URL 暂时为空不再导致 `scriptActive` 等 dispatch 被丢弃。
+- 脚本菜单提取器（如 Greasyfork 564114）不再显示空菜单：菜单命令通过 `window[Symbol.for("ChromeXt")].commands` 暴露，早于提取器注册的命令也能被读取。
+- 管理面板刷新显著加快：解析结果、搜索文本、应用图标/名称/版本、LSPosed 作用域都会跨刷新缓存；作用域读取优先检查已知路径，不再遍历 `/data/adb`。
+
 ## 3.15.0 更新内容
 
 - 修复页面安装弹窗偶尔不出现：不再只认 `document.body > pre`，浏览器把 `.user.js` 渲染进 `textarea`/`div` 或加包装层时也会显示确认框；`foo.user.js?v=1`、`#fragment`、大小写不同的链接同样识别；沙箱页改为有界重试，不再同步递归。

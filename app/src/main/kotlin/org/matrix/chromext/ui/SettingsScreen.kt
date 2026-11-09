@@ -143,9 +143,7 @@ fun SettingsScreen(
                     }
                     .getOrDefault(false)
             val latency = (SystemClock.elapsedRealtimeNanos() - start) / 1_000_000.0
-            val records = repository.records()
-            val storageBytes =
-                records.sumOf { (it.storage?.toByteArray(Charsets.UTF_8)?.size ?: 0).toLong() }
+            val stats = repository.stats()
             val activated = repository.activations().mapTo(mutableSetOf()) { it.scriptId }
             val resourcesDir = File(context.filesDir, "resources")
             val resourceFiles =
@@ -159,10 +157,10 @@ fun SettingsScreen(
                 schemaVersion = ScriptDbHelper.DATABASE_VERSION,
                 databasePath = repository.databasePath(),
                 databaseSize = repository.databaseSize(),
-                totalScripts = records.size,
-                enabledScripts = records.count { it.enabled },
-                activatedScripts = records.count { it.id in activated },
-                storageBytes = storageBytes,
+                totalScripts = stats.total,
+                enabledScripts = stats.enabled,
+                activatedScripts = activated.size,
+                storageBytes = stats.storageBytes,
                 hookedApps = repository.hookedApps().size,
                 resourceCount = resourceFiles.size,
                 resourceBytes = resourceFiles.sumOf { it.length() },

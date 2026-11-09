@@ -142,8 +142,12 @@ class ScriptContentProvider : ContentProvider() {
       }
       "getResource" -> {
         val key = bundle.getString("key") ?: return Bundle()
-        val data = ScriptFiles.readPrivateResource(context!!, key) ?: return Bundle()
-        Bundle().apply { putByteArray("data", data) }
+        val file = ScriptFiles.privateResourceFile(context!!, key)
+        val data = runCatching { file.takeIf { it.isFile }?.readBytes() }.getOrNull() ?: return Bundle()
+        Bundle().apply {
+          putByteArray("data", data)
+          putLong("modified", file.lastModified())
+        }
       }
       "putResource" -> {
         val key = bundle.getString("key") ?: return Bundle().apply { putBoolean("ok", false) }
@@ -241,15 +245,29 @@ class ScriptContentProvider : ContentProvider() {
     val label = bundle.getString("label") ?: ""
     val versionName = bundle.getString("version") ?: ""
     val ok = store?.reportHookedApp(packageName, label, versionName) ?: false
+    if (ok) allowedPackages += packageName
     return Bundle().apply { putBoolean("ok", ok) }
   }
+
+  private val allowedPackages: MutableSet<String> =
+      java.util.Collections.newSetFromMap(
+          java.util.concurrent.ConcurrentHashMap<String, Boolean>())
 
   private fun callerAllowed(): Boolean {
     val uid = Binder.getCallingUid()
     if (uid == Process.myUid()) return true
     val packages = context?.packageManager?.getPackagesForUid(uid) ?: return false
-    val allowed = BrowserCatalog.xposedScope.toSet()
-    return packages.any { it in allowed }
+    val catalog = BrowserCatalog.xposedScope.toSet()
+    // Browsers are always allowed. Other scoped hosts (WebView apps the user hooked by hand, for
+    // example a note-taking app) are allowed once the module has reported itself inside them;
+    // reportHookedApp validates that the caller owns the package, so this cannot be claimed by an
+    // unrelated app. Before 3.15 those apps relied on a browser-local database copy.
+    return packages.any { packageName ->
+      if (packageName in catalog || packageName in allowedPackages) return@any true
+      val hooked = store?.isHookedApp(packageName) == true
+      if (hooked) allowedPackages += packageName
+      hooked
+    }
   }
 
   /**

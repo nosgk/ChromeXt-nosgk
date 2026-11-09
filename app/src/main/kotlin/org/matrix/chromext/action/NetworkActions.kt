@@ -59,11 +59,23 @@ object NetworkActions : ActionGroup {
                   if (cacheKey == null) {
                     sendRequest(context, detail, uuid, null)
                   } else {
-                    // Look the local mirror up on the IO pool; a hit answers without the network.
+                    // Look the local mirror up on the IO pool; a fresh hit answers without the
+                    // network. A stale hit still answers immediately, then refreshes in the
+                    // background so scripts never block on a slow CDN and never stay stale.
                     Chrome.IO.submit {
                       val cached = CentralBridge.getResource(cacheKey)
-                      if (cached != null) respondFromCache(context, detail, cached, request)
-                      else sendRequest(context, detail, uuid, cacheKey)
+                      val fresh =
+                          cached != null &&
+                              System.currentTimeMillis() - cached.modified <= CACHE_TTL_MS
+                      when {
+                        cached != null && fresh ->
+                            respondFromCache(context, detail, cached.bytes, request)
+                        cached != null -> {
+                          respondFromCache(context, detail, cached.bytes, request)
+                          sendRequest(context, detail, Math.random(), cacheKey, silent = true)
+                        }
+                        else -> sendRequest(context, detail, uuid, cacheKey)
+                      }
                     }
                   }
                 }
@@ -123,6 +135,7 @@ object NetworkActions : ActionGroup {
       detail: JSONObject,
       uuid: Double,
       cacheKey: String?,
+      silent: Boolean = false,
   ) {
     val request =
         XMLHttpRequest(
@@ -132,6 +145,7 @@ object NetworkActions : ActionGroup {
             context.tab,
             context.frameId,
             cacheKey,
+            silent,
         )
     ActionState.xmlhttpRequests.put(uuid, request)
     Chrome.IO.submit { request.send() }
@@ -194,4 +208,9 @@ object NetworkActions : ActionGroup {
 
   private fun looksLikeText(bytes: ByteArray): Boolean =
       bytes.take(1024).none { it == 0.toByte() }
+
+  private companion object {
+    /** Runtime GET cache freshness; older entries are still served while a refresh runs. */
+    const val CACHE_TTL_MS = 24 * 60 * 60 * 1000L
+  }
 }

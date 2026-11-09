@@ -2,6 +2,22 @@
 
 All notable changes to this fork are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the module's `versionName`.
 
+## [3.15.1] - 2026-11-09
+
+### Fixed
+
+- Scripts not running in scoped WebView hosts outside the browser catalog (for example a note-taking app added to the Xposed scope): the provider only accepted catalog browsers, and 3.15.0 removed the browser-local database fallback. `callerAllowed()` now also accepts a package the module has reported itself inside (`hooked_app`, validated by package ownership).
+- Scripts installed before 3.15.0 could lose their `@require` libraries because parsing no longer downloads them. The browser now asks the module to hydrate any record whose `lib` is empty but whose meta declares `@require` (throttled to one attempt per 10 minutes), and the manager keeps doing the same on startup.
+- `GM_info.script` only exposed plural lists (`grants`, `matches`, ...). Tampermonkey-compatible singular aliases (`grant`, `match`, `include`, `exclude`, `require`, `connect`) are back, and the `exlcude` typo that left `excludes` undefined is fixed.
+- `<all_urls>` and bare `*` match/include directives never matched; both are now handled (http/https/file/ftp for `<all_urls>`).
+- The runtime GET cache answered every hit forever, so API-like URLs could serve stale JSON. Entries are fresh for 24 hours; a stale entry is still served immediately while a silent background request refreshes it.
+- Activation reports (and other dispatches) were dropped when the tab URL was momentarily null at document-start; `checkPermisson` no longer force-unwraps it.
+- Userscript menu extractors (for example greasyfork script 564114) saw an empty menu: commands are now exposed as `window[Symbol.for("ChromeXt")].commands`, so entries registered before the extractor patched `Array.prototype.push` are visible.
+
+### Changed
+
+- Manager refresh is much faster: parsed scripts, lower-cased search text, app icons/labels/versions and the LSPosed scope are cached across refreshes; only changed rows are re-parsed. The scope reader probes the known framework paths first instead of walking `/data/adb`.
+
 ## [3.15.0] - 2026-11-09
 
 ### Added
@@ -194,7 +210,8 @@ All notable changes to this fork are documented here. The format follows [Keep a
 - Support for the MVC page menu design.
 - Loading-state tracking for browsers where `mIsLoading` cannot be located.
 
-[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.15.0...HEAD
+[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.15.1...HEAD
+[3.15.1]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.15.1
 [3.15.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.15.0
 [3.14.2]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.14.2
 [3.14.1]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.14.1

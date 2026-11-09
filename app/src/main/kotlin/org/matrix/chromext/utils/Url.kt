@@ -15,7 +15,16 @@ fun randomString(length: Int): String {
 }
 
 private fun urlMatch(match: String, url: String, strict: Boolean): Boolean {
-  var pattern = match
+  val trimmed = match.trim()
+  // Tampermonkey directives that the wildcard translation below cannot express.
+  if (trimmed == "<all_urls>") {
+    return url.startsWith("http://") ||
+        url.startsWith("https://") ||
+        url.startsWith("file://") ||
+        url.startsWith("ftp://")
+  }
+  if (trimmed == "*") return true
+  var pattern = trimmed
   val regexPattern = pattern.startsWith("/") && pattern.endsWith("/")
 
   if (regexPattern) {

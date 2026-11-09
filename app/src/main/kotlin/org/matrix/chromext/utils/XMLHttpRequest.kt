@@ -22,6 +22,8 @@ class XMLHttpRequest(
     frameId: String?,
     /** When set, a successful GET is cached under this key in Download/ChromeXT/resources. */
     cacheKey: String? = null,
+    /** Background refresh: cache the response without delivering it to the page. */
+    private val silent: Boolean = false,
 ) {
   val currentTab = currentTab
   val frameId = frameId
@@ -174,9 +176,11 @@ class XMLHttpRequest(
   ) {
     response.put("type", type)
     response.put("data", data)
-    val code = "Symbol.${Local.name}.unlock(${Local.key}).post('xmlhttpRequest', ${response});"
-    Handler(Chrome.getContext().mainLooper).post {
-      Chrome.evaluateJavascript(listOf(code), currentTab, frameId)
+    if (!silent) {
+      val code = "Symbol.${Local.name}.unlock(${Local.key}).post('xmlhttpRequest', ${response});"
+      Handler(Chrome.getContext().mainLooper).post {
+        Chrome.evaluateJavascript(listOf(code), currentTab, frameId)
+      }
     }
     if (disconnect) {
       ActionState.xmlhttpRequests.remove(response.getDouble("uuid"))

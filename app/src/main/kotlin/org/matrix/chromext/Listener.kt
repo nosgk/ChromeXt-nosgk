@@ -25,7 +25,9 @@ object Listener {
 
   private fun checkPermisson(action: String, key: Double, tab: Any?): Boolean {
     if (key != Local.key) return false
-    val url = Chrome.getUrl(tab)!!
+    // At document-start the tab URL can still be empty; a null URL must not throw here or the
+    // whole dispatch (activation reports, GM storage, installs) is silently lost.
+    val url = Chrome.getUrl(tab) ?: return false
     if (url.endsWith(".txt")) return false
     if (isUserScript(url) && !allowedActions.get("userscript")!!.contains(action)) return false
     if (allowedActions.get("front-end")!!.contains(action) && !isChromeXtFrontEnd(url)) return false

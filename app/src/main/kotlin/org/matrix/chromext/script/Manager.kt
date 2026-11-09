@@ -31,6 +31,8 @@ object ScriptDbManager {
   private const val CACHE_FILE = "chromext-scripts.json"
   private const val REVISION_INTERVAL_MS = 1_000L
   private const val ACTIVATION_FLUSH_MS = 60_000L
+  private const val HYDRATE_RETRY_MS = 10 * 60_000L
+  private val requireReg = Regex("""(?m)^//\s+@require\s+\S+""")
 
   // Read from page-injection threads while actions may add/remove scripts from the UI thread.
   val scripts: MutableList<Script> = CopyOnWriteArrayList(loadCache())
@@ -48,6 +50,7 @@ object ScriptDbManager {
   @Volatile private var lastActivationFlush = 0L
 
   private val pendingActivations = ConcurrentHashMap<String, Long>()
+  private val hydrationAttempts = ConcurrentHashMap<String, Long>()
 
   /** Engine switches pulled from the central config table; defaults match pre-3.10 behavior. */
   @Volatile var engine = EngineConfig()
@@ -156,6 +159,25 @@ object ScriptDbManager {
     val central = CentralBridge.queryRecords() ?: return
     cachedRevision = CentralBridge.revision() ?: cachedRevision
     refreshFromCentral(central)
+    hydrateMissingRequires(central)
+  }
+
+  /**
+   * Scripts installed by older builds (or imported before hydration existed) have no `@require`
+   * payloads. Ask the module process to download them; the next page load picks the result up.
+   * Attempts are throttled so an offline device does not retry on every sync.
+   */
+  private fun hydrateMissingRequires(records: List<ScriptRecord>) {
+    val now = System.currentTimeMillis()
+    records.forEach { record ->
+      if (record.lib != "[]" || !requireReg.containsMatchIn(record.meta)) return@forEach
+      val last = hydrationAttempts[record.id] ?: 0L
+      if (now - last < HYDRATE_RETRY_MS) return@forEach
+      hydrationAttempts[record.id] = now
+      Chrome.IO.submit {
+        if (CentralBridge.hydrate(record.id)) hydrationAttempts.remove(record.id)
+      }
+    }
   }
 
   /**
