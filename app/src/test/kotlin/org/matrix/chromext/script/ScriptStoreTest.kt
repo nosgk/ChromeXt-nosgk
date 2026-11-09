@@ -20,7 +20,7 @@ class ScriptStoreTest {
       ScriptRecord(
           id = id,
           meta =
-              "// ==UserScript==\n// @name Demo\n// @match https://example.com/*\n// ==/UserScript==\n",
+              "// ==UserScript==\n// @namespace a\n// @name two\n// @match https://example.com/*\n// ==/UserScript==\n",
           code = "console.log(1);",
           storage = null,
           enabled = true,

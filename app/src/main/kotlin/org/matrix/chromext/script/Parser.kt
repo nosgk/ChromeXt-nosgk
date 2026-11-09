@@ -61,7 +61,10 @@ fun parseScript(
             if (parts.isNotEmpty()) {
               val url = parts.getOrNull(1).orEmpty().substringBefore("#")
               script.resources.add(
-                  ScriptResource(name = parts[0], url = url, mime = guessMime(parts[0])))
+                  ScriptResource(
+                      name = parts[0],
+                      url = url,
+                      mime = guessMime(url.substringAfterLast('/'))))
             }
           }
           "version" -> script.version = value
