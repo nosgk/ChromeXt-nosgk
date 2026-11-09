@@ -1,10 +1,12 @@
 package org.matrix.chromext.script
 
+import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import org.json.JSONArray
 import org.matrix.chromext.Chrome
 import org.matrix.chromext.utils.Log
+import org.matrix.chromext.utils.ModuleLog
 
 /**
  * Browser-side client for [org.matrix.chromext.provider.ScriptContentProvider]. Every call is
@@ -35,8 +37,16 @@ object CentralBridge {
     Log.dLocal("provider $lastError")
   }
 
+  /**
+   * The context attached for logging is always available after `onPackageReady` and belongs to this
+   * process; `Chrome.getContext()` additionally needs a tab and is only the fallback. Ordering it
+   * this way also keeps a failed lookup from logging through the same sink (which would recurse).
+   */
+  private fun appContext(): Context =
+      ModuleLog.contextOrNull() ?: Chrome.getContext()
+
   private fun call(method: String, extras: Bundle? = null): Bundle? =
-      runCatching { Chrome.getContext().contentResolver.call(uri, method, null, extras) }
+      runCatching { appContext().contentResolver.call(uri, method, null, extras) }
           .onFailure { fail(method, it) }
           .getOrNull()
 
@@ -48,7 +58,7 @@ object CentralBridge {
     val name = "upload-" + System.nanoTime() + ".json"
     return runCatching {
           val stream =
-              Chrome.getContext().contentResolver.openOutputStream(inboxUri(name))
+              appContext().contentResolver.openOutputStream(inboxUri(name))
                   ?: throw IllegalStateException("inbox stream unavailable")
           stream.use { it.write(json.toByteArray(Charsets.UTF_8)) }
           name
@@ -71,7 +81,7 @@ object CentralBridge {
   fun queryRecords(): List<ScriptRecord>? {
     val target = call("queryScripts")?.getString("uri") ?: return null
     return runCatching {
-          Chrome.getContext().contentResolver.openInputStream(Uri.parse(target))?.use { input ->
+          appContext().contentResolver.openInputStream(Uri.parse(target))?.use { input ->
             val array = JSONArray(input.bufferedReader().readText())
             List(array.length()) { ScriptRecord.fromJson(array.getJSONObject(it)) }
           }

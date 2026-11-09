@@ -11,8 +11,8 @@ android {
     applicationId = "org.matrix.chromext"
     minSdk = 21
     targetSdk = 35
-    versionCode = 30
-    versionName = "3.15.4"
+    versionCode = 31
+    versionName = "3.15.5"
 
     // Compose ships a graphics-path native library. Publish the arm64-v8a slice only, which is
     // what the release artifact name promises.

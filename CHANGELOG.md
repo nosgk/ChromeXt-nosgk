@@ -2,6 +2,16 @@
 
 All notable changes to this fork are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the module's `versionName`.
 
+## [3.15.5] - 2026-11-09
+
+### Fixed
+
+- The detailed debug log stayed empty even with the switch on. `onPackageReady` fires before the Application exists, so `ModuleLog` never attached and every startup hook probe was dropped from the file; `CentralBridge` also required `Chrome.getContext()`, which is unavailable before a tab exists. The module now attaches the system context with the package name as the log label, the bridge falls back to that context for provider calls, and the manager applies the switch immediately and writes a transition marker.
+
+### Added
+
+- “写入测试日志” in the diagnostics card appends a synchronous marker line, which separates “the log file cannot be written” from “the hooked app never reached a probe”.
+
 ## [3.15.4] - 2026-11-09
 
 ### Added

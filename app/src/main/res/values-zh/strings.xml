@@ -254,6 +254,8 @@
 	<string name="settings_engine_verbose_log_hint">记录 Hook 安装、注入匹配、Provider 调用与安装暂存的细节，写入模块日志文件与 LSPosed 日志</string>
 	<string name="settings_log_file">日志文件 · %1$s</string>
 	<string name="settings_log_view">查看日志</string>
+	<string name="settings_log_selftest">写入测试日志</string>
+	<string name="settings_log_selftest_done">测试日志已写入，可打开日志确认</string>
 	<string name="settings_log_clear">清空日志</string>
 	<string name="settings_log_copy">复制</string>
 	<string name="settings_log_close">关闭</string>

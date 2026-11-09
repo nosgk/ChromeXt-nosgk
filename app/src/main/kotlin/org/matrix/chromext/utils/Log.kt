@@ -18,7 +18,12 @@ object Log {
   @Volatile private var verbose = true
 
   fun setVerbose(enabled: Boolean) {
+    if (verbose == enabled) return
+    // Record the transition with the value that lets the line through: disabling is logged just
+    // before the gate closes, enabling just after it opens.
+    if (!enabled) d("diagnostics disabled")
     verbose = enabled
+    if (enabled) d("diagnostics enabled")
   }
 
   val isVerbose: Boolean

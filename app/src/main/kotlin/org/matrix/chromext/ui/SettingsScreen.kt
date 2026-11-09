@@ -77,6 +77,7 @@ import org.matrix.chromext.script.LegacyReadResult
 import org.matrix.chromext.script.ScriptDbHelper
 import org.matrix.chromext.script.ScriptFiles
 import org.matrix.chromext.script.ScriptRecord
+import org.matrix.chromext.utils.Log
 import org.matrix.chromext.utils.ModuleLog
 import org.matrix.chromext.utils.Su
 
@@ -305,6 +306,9 @@ fun SettingsScreen(
 
   fun updateEngine(updated: EngineConfig) {
     engine = updated
+    // Apply the switch in the manager right away so the marker line lands immediately; hooked
+    // apps pick the value up on their next config sync.
+    Log.setVerbose(updated.verboseLog)
     scope.launch { withContext(Dispatchers.IO) { repository.saveEngineConfig(updated) } }
   }
 
@@ -404,6 +408,11 @@ fun SettingsScreen(
             onToggleVerbose = { updateEngine(engine.copy(verboseLog = it)) },
             onViewLog = {
               scope.launch { logText = withContext(Dispatchers.IO) { ModuleLog.read(context) } }
+            },
+            onSelfTest = {
+              ModuleLog.marker(context, "self-test from the settings page")
+              loadTelemetry()
+              onMessage(context.getString(R.string.settings_log_selftest_done))
             },
             onClearLog = {
               scope.launch {
@@ -886,6 +895,7 @@ private fun DiagnosticsCard(
     logSize: Long,
     onToggleVerbose: (Boolean) -> Unit,
     onViewLog: () -> Unit,
+    onSelfTest: () -> Unit,
     onClearLog: () -> Unit,
 ) {
   Card(modifier = Modifier.fillMaxWidth()) {
@@ -914,6 +924,9 @@ private fun DiagnosticsCard(
         )
       }
       Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        TextButton(onClick = onSelfTest) {
+          Text(stringResource(R.string.settings_log_selftest))
+        }
         TextButton(onClick = onViewLog) { Text(stringResource(R.string.settings_log_view)) }
         TextButton(onClick = onClearLog) { Text(stringResource(R.string.settings_log_clear)) }
       }

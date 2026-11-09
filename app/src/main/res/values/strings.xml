@@ -254,6 +254,8 @@
 	<string name="settings_engine_verbose_log_hint">Record hook installation, injection matching, provider calls and install staging in the module log and the LSPosed log</string>
 	<string name="settings_log_file">Log file · %1$s</string>
 	<string name="settings_log_view">View log</string>
+	<string name="settings_log_selftest">Write test line</string>
+	<string name="settings_log_selftest_done">Test line written; open the log to check it</string>
 	<string name="settings_log_clear">Clear log</string>
 	<string name="settings_log_copy">Copy</string>
 	<string name="settings_log_close">Close</string>

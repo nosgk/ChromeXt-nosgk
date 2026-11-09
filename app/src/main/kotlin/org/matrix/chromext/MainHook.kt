@@ -50,7 +50,14 @@ class MainHook : XposedModule() {
   override fun onPackageReady(param: PackageReadyParam) {
     Log.d("package ready: ${param.packageName} in ${processName()}")
     if (param.packageName == "org.matrix.chromext") return
-    currentApplication()?.let { ModuleLog.attach(it) }
+    // The application context does not exist yet at this point, so attach the system context (the
+    // same one the hook report already uses) and name the process explicitly. Without this the
+    // startup probes are dropped from the shared log, which is exactly when they are needed.
+    val early = systemContext() ?: currentApplication()
+    early?.let {
+      ModuleLog.attach(it, param.packageName)
+      Log.d("diagnostics attached for ${param.packageName} in ${processName()}")
+    }
     if (param.packageName != "android") {
       reportHookedApp(param.packageName, param.applicationInfo)
       detectUnsupportedKernel(param.packageName, param.classLoader)

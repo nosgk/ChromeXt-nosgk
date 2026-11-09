@@ -33,6 +33,7 @@ object ModuleLog {
   private const val MAX_STORED_LINE = MAX_LINE + 200
 
   @Volatile private var context: Context? = null
+  @Volatile private var processLabel: String = "?"
   @Volatile private var moduleProcess = false
 
   private val queue = ArrayDeque<String>()
@@ -45,12 +46,21 @@ object ModuleLog {
             SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US)
       }
 
-  /** Called from every process that wants its `Log` lines to reach the shared file. */
-  fun attach(ctx: Context) {
-    val app = ctx.applicationContext ?: ctx
-    context = app
-    moduleProcess = app.packageName == MODULE_PACKAGE
+  /**
+   * Called from every process that wants its `Log` lines to reach the shared file.
+   *
+   * [label] names the process in the log. A hooked app passes its package name because at
+   * `onPackageReady` the application context does not exist yet and only the system context is
+   * available; attaching it anyway is what makes the startup hook probes reach the file.
+   */
+  fun attach(ctx: Context, label: String = ctx.packageName ?: "?") {
+    context = ctx.applicationContext ?: ctx
+    processLabel = label
+    moduleProcess = label == MODULE_PACKAGE
   }
+
+  /** The context to use for provider calls when `Chrome` has no tab yet. */
+  fun contextOrNull(): Context? = context
 
   fun file(context: Context): File = File(File(context.filesDir, LOG_DIR), LOG_NAME)
 
@@ -59,9 +69,9 @@ object ModuleLog {
    * [Chrome.IO]. A process that never called [attach] silently drops the line.
    */
   fun append(message: String) {
-    val ctx = context ?: return
+    if (context == null) return
     if (message.isBlank()) return
-    val tag = "${ctx.packageName ?: "?"}#${android.os.Process.myPid()}"
+    val tag = "$processLabel#${android.os.Process.myPid()}"
     val line = formatLine(System.currentTimeMillis(), tag, message)
     synchronized(queue) {
       if (queue.size >= MAX_QUEUE) queue.removeFirst()
@@ -145,6 +155,18 @@ object ModuleLog {
       runCatching { file.delete() }
       runCatching { File(file.parentFile, "$LOG_NAME.1").delete() }
     }
+  }
+
+  /**
+   * Writes one line synchronously. The settings self-test uses it to prove the file can be written,
+   * which separates "the sink is broken" from "the hooked app never reached a probe".
+   */
+  fun marker(context: Context, message: String) {
+    write(
+        context,
+        listOf(
+            formatLine(
+                System.currentTimeMillis(), context.packageName ?: "manager", message)))
   }
 
   /** Collapses a multi-line message into one log line and bounds its length. */
