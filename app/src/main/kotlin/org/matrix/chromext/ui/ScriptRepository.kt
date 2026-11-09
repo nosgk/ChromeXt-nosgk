@@ -132,7 +132,7 @@ class ScriptRepository(context: Context) {
     val requireReg = Regex("""(?m)^//\s+@require\s+\S+""")
     records().forEach { record ->
       if (record.lib != "[]" || !requireReg.containsMatchIn(record.meta)) return@forEach
-      val script = record.toScript() ?: return@forEach
+      val script = toScript(record) ?: return@forEach
       val hydrated = ScriptHydrator.hydrate(appContext, script)
       if (hydrated.lib.isNotEmpty()) {
         runCatching { store.upsert(hydrated.toRecord()) }

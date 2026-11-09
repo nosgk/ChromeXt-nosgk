@@ -208,9 +208,7 @@ object NetworkActions : ActionGroup {
 
   private fun looksLikeText(bytes: ByteArray): Boolean =
       bytes.take(1024).none { it == 0.toByte() }
-
-  private companion object {
-    /** Runtime GET cache freshness; older entries are still served while a refresh runs. */
-    const val CACHE_TTL_MS = 24 * 60 * 60 * 1000L
-  }
 }
+
+/** Runtime GET cache freshness; older entries are still served while a refresh runs. */
+private const val CACHE_TTL_MS = 24 * 60 * 60 * 1000L
