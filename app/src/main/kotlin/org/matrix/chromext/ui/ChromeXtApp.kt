@@ -93,6 +93,7 @@ fun ChromeXtApp(
   var scripts by remember { mutableStateOf<List<Script>>(emptyList()) }
   var hookedApps by remember { mutableStateOf<List<HookedApp>>(emptyList()) }
   var activations by remember { mutableStateOf<Map<String, ScriptActivation>>(emptyMap()) }
+  var activationPairs by remember { mutableStateOf<Set<Pair<String, String>>>(emptySet()) }
   var apps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
   var scopeResult by remember { mutableStateOf(ScopeResult()) }
   var includeAllApps by rememberSaveable { mutableStateOf(false) }
@@ -136,6 +137,8 @@ fun ChromeXtApp(
               it.activations
                   .groupBy { activation -> activation.scriptId }
                   .mapValues { entry -> entry.value.maxByOrNull { a -> a.lastActive }!! }
+          activationPairs =
+              it.activations.mapTo(mutableSetOf()) { a -> a.scriptId to a.packageName }
           apps = it.apps
           scopeResult = it.scope
         }
@@ -331,7 +334,7 @@ fun ChromeXtApp(
                     modifier = Modifier.padding(padding),
                     apps = apps,
                     scripts = scripts,
-                    activations = activations,
+                    activationPairs = activationPairs,
                     loading = loading,
                     refreshing = refreshing,
                     includeAll = includeAllApps,

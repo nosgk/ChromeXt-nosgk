@@ -57,7 +57,6 @@ import org.matrix.chromext.R
 import org.matrix.chromext.browser.BrowserCatalog
 import org.matrix.chromext.script.HookedApp
 import org.matrix.chromext.script.Script
-import org.matrix.chromext.script.ScriptActivation
 
 /** One row of the apps screen. */
 data class AppEntry(
@@ -140,7 +139,7 @@ fun AppsScreen(
     modifier: Modifier,
     apps: List<AppEntry>,
     scripts: List<Script>,
-    activations: Map<String, ScriptActivation>,
+    activationPairs: Set<Pair<String, String>>,
     loading: Boolean,
     refreshing: Boolean,
     includeAll: Boolean,
@@ -274,7 +273,8 @@ fun AppsScreen(
                     enabled = scripts.count { it.appliesTo(app.packageName) && it.enabled },
                     activated =
                         scripts.count {
-                          it.appliesTo(app.packageName) && activations.containsKey(it.id)
+                          it.appliesTo(app.packageName) &&
+                              (it.id to app.packageName) in activationPairs
                         },
                     onClick = { onOpenApp(app.packageName) },
                 )
