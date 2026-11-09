@@ -26,6 +26,7 @@ import org.matrix.chromext.proxy.UserScriptProxy
 import org.matrix.chromext.script.Local
 import org.matrix.chromext.script.ScriptDbManager
 import org.matrix.chromext.utils.Log
+import org.matrix.chromext.utils.ModuleLog
 import org.matrix.chromext.utils.XMLHttpRequest
 import org.matrix.chromext.utils.findField
 import org.matrix.chromext.utils.findMethod
@@ -55,6 +56,7 @@ object Chrome {
   fun init(ctx: Context, packageName: String? = null) {
     val initialized = mContext != null
     mContext = WeakReference(ctx)
+    ModuleLog.attach(ctx)
 
     if (initialized || packageName == null) return
     this.packageName = packageName
@@ -165,9 +167,12 @@ object Chrome {
         getTab()?.invokeMethod { name == "getContext" || returnType == Context::class.java }
             as Context?
     if (activity != null && mContext == null) init(activity, activity.packageName)
-    return activity
-        ?: mContext?.get()
-        ?: throw IllegalStateException("ChromeXt context is not initialized")
+    val ctx = activity ?: mContext?.get()
+    if (ctx == null) {
+      Log.e("ChromeXt context is not initialized")
+      throw IllegalStateException("ChromeXt context is not initialized")
+    }
+    return ctx
   }
 
   fun checkTab(tab: Any?): Boolean {
@@ -299,6 +304,8 @@ object Chrome {
         } else if (UserScriptHook.isInit) {
           val failed = codes.filter { !UserScriptProxy.evaluateJavascript(it, tab) }
           if (failed.size > 0) evaluateJavascript(failed, tab, frameId, true)
+        } else {
+          Log.d("evaluateJavascript: no injection hook is installed in this process")
         }
       }
     }

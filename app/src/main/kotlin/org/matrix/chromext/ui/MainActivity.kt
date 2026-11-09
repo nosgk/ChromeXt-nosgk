@@ -17,11 +17,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import org.matrix.chromext.utils.ModuleLog
 
 class MainActivity : ComponentActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    // The manager writes the shared log file directly; hooked apps upload their lines through the
+    // provider. Attaching here keeps the manager's own entries working even before the provider
+    // has been created.
+    ModuleLog.attach(applicationContext)
     requestNotificationPermission()
     requestLegacyStoragePermission()
     val activeUrl = intent?.getStringExtra(EXTRA_ACTIVE_URL)

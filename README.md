@@ -139,6 +139,16 @@ ChromeXt 自带一个用 Jetpack Compose 编写的原生管理面板。可以从
 
 对于 WebView 系浏览器，以及自带页面菜单的 Chromium 分支（例如 Herond、Whale），这些入口会出现在上下文菜单里。
 
+### 诊断日志
+
+设置页的「诊断」卡片可以打开「详细调试日志」。开启后，模块会把 Hook 安装结果、注入匹配（每个脚本为什么被跳过）、Provider 调用与被拒原因、安装暂存的每一步写进滚动日志：
+
+`/data/user/0/org.matrix.chromext/files/logs/chromext.log`（超过 512 KB 自动轮转，只保留一份历史文件）
+
+被 hook 的应用通过 Provider 把日志汇总到同一个文件，所以不需要 `adb logcat` 也能看到别的进程里发生了什么。卡片里的「查看日志」可以直接预览、复制或清空。反馈问题时请附上复现前后的日志片段；日志包含包名/进程号、页面 URL（截断）与脚本 id，但不会记录脚本正文。
+
+开关本身也存放在中央配置表里；Provider 被拒绝或尚未启动时，日志会继续写到 logcat 与 LSPosed 日志，方便定位启动阶段的失败。
+
 ## 构建
 
 构建**只在 GitHub Actions 上运行**，工作流是**手动触发**（`workflow_dispatch`），任何 push 都不会自动触发。详见 [.github/workflows/build.yml](.github/workflows/build.yml)。

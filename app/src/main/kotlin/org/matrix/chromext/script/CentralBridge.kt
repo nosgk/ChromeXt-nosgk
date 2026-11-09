@@ -4,6 +4,7 @@ import android.net.Uri
 import android.os.Bundle
 import org.json.JSONArray
 import org.matrix.chromext.Chrome
+import org.matrix.chromext.utils.Log
 
 /**
  * Browser-side client for [org.matrix.chromext.provider.ScriptContentProvider]. Every call is
@@ -20,8 +21,23 @@ object CentralBridge {
   private const val AUTHORITY = "content://org.matrix.chromext.scripts"
   private val uri = Uri.parse(AUTHORITY)
 
+  /**
+   * Last bridge failure as `method: ExceptionType: message`. The provider call is best-effort by
+   * design, but "rejected by the caller check" and "provider not running" used to look identical
+   * (both returned null); the diagnostics now show which one happened.
+   */
+  @Volatile var lastError: String? = null
+    private set
+
+  private fun fail(method: String, error: Throwable): Unit {
+    lastError = "$method: ${error::class.java.simpleName}: ${error.message}"
+    // dLocal: logging a failed appendLog through the sink would recurse.
+    Log.dLocal("provider $lastError")
+  }
+
   private fun call(method: String, extras: Bundle? = null): Bundle? =
       runCatching { Chrome.getContext().contentResolver.call(uri, method, null, extras) }
+          .onFailure { fail(method, it) }
           .getOrNull()
 
   private fun inboxUri(name: String): Uri =
@@ -31,11 +47,13 @@ object CentralBridge {
   private fun writeInbox(json: String): String? {
     val name = "upload-" + System.nanoTime() + ".json"
     return runCatching {
-          Chrome.getContext().contentResolver.openOutputStream(inboxUri(name))?.use {
-            it.write(json.toByteArray(Charsets.UTF_8))
-          } ?: return@runCatching null
+          val stream =
+              Chrome.getContext().contentResolver.openOutputStream(inboxUri(name))
+                  ?: throw IllegalStateException("inbox stream unavailable")
+          stream.use { it.write(json.toByteArray(Charsets.UTF_8)) }
           name
         }
+        .onFailure { fail("openOutputStream(inbox)", it) }
         .getOrNull()
   }
 
@@ -58,6 +76,7 @@ object CentralBridge {
             List(array.length()) { ScriptRecord.fromJson(array.getJSONObject(it)) }
           }
         }
+        .onFailure { fail("queryScripts(openInputStream)", it) }
         .getOrNull()
   }
 
@@ -109,8 +128,14 @@ object CentralBridge {
     return call("stageInstall", extras)?.getString("token")
   }
 
-  fun getResource(key: String): CachedResource? {
-    val bundle = call("getResource", Bundle().apply { putString("key", key) }) ?: return null
+  /** Ships a batch of already formatted log lines to the module's rolling log file. */
+  fun appendLog(lines: String): Boolean {
+    if (lines.isBlank()) return true
+    val extras = Bundle().apply { putString("lines", lines) }
+    return call("appendLog", extras)?.getBoolean("ok") == true
+  }
+
+  fun getResource(key: String): CachedResource? {    val bundle = call("getResource", Bundle().apply { putString("key", key) }) ?: return null
     val data = bundle.getByteArray("data") ?: return null
     return CachedResource(data, bundle.getLong("modified"))
   }

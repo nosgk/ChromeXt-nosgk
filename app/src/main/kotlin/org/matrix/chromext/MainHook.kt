@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.webkit.WebChromeClient
 import android.webkit.WebView
@@ -20,6 +21,7 @@ import org.matrix.chromext.hook.PreferenceHook
 import org.matrix.chromext.hook.UserScriptHook
 import org.matrix.chromext.hook.WebViewHook
 import org.matrix.chromext.utils.Log
+import org.matrix.chromext.utils.ModuleLog
 import org.matrix.chromext.utils.XposedApi
 import org.matrix.chromext.utils.findMethodOrNull
 import org.matrix.chromext.utils.hookAfter
@@ -36,6 +38,9 @@ class MainHook : XposedModule() {
   /** Packages already reported by this process; a process can host more than one package. */
   private val reported = java.util.Collections.synchronizedSet(mutableSetOf<String>())
 
+  /** A WebView host may build many clients before its chrome client appears; warn only once. */
+  private var missingClientReported = false
+
   override fun onModuleLoaded(param: ModuleLoadedParam) {
     XposedApi.install(this)
     Resource.init(getModuleApplicationInfo().sourceDir)
@@ -43,9 +48,13 @@ class MainHook : XposedModule() {
   }
 
   override fun onPackageReady(param: PackageReadyParam) {
-    Log.d(param.packageName + " started")
+    Log.d("package ready: ${param.packageName} in ${processName()}")
     if (param.packageName == "org.matrix.chromext") return
-    if (param.packageName != "android") reportHookedApp(param.packageName, param.applicationInfo)
+    currentApplication()?.let { ModuleLog.attach(it) }
+    if (param.packageName != "android") {
+      reportHookedApp(param.packageName, param.applicationInfo)
+      detectUnsupportedKernel(param.packageName, param.classLoader)
+    }
     val classLoader = param.classLoader
     if (BrowserCatalog.supportedPackages.contains(param.packageName)) {
       // Every constructor taking a Context, rather than a fixed index into an order the JLS leaves
@@ -61,18 +70,20 @@ class MainHook : XposedModule() {
             first != null && Context::class.java.isAssignableFrom(first)
           }
       if (constructors.isEmpty()) Log.e("No WindowAndroid constructor takes a Context")
+      Log.d("WindowAndroid constructors: ${constructors.size}")
       constructors.forEach { constructor ->
         constructor.hookAfter {
           Chrome.init(it.args[0] as Context, param.packageName)
           // Keep the menu hooks reachable even when the UserScript hook cannot be installed
-          runCatching { initHooks(UserScriptHook) }.onFailure { Log.ex(it) }
+          runCatching { initHooks(UserScriptHook) }
+              .onFailure { Log.ex(it, "UserScriptHook init failed") }
           if (ContextMenuHook.isInit) return@hookAfter
           // The settings screen and the browser menu are independent features, kept in separate
           // runCatching blocks so a browser that cannot host our preferences still gets its menu
           // entries.
           if (!Chrome.isVivaldi) {
             runCatching { initHooks(PreferenceHook) }
-                .onFailure { if (BuildConfig.DEBUG) Log.ex(it) }
+                .onFailure { Log.ex(it, "PreferenceHook init failed") }
           }
           runCatching {
             initHooks(
@@ -87,12 +98,13 @@ class MainHook : XposedModule() {
           }
               .onFailure {
                 initHooks(ContextMenuHook)
-                if (BuildConfig.DEBUG) Log.ex(it)
+                Log.ex(it, "Menu hook init failed")
               }
         }
       }
     } else {
       val ctx = currentApplication()
+      Log.d("WebView host ${param.packageName}: application=${ctx != null}")
 
       Chrome.isMi =
           Chrome.isMi ||
@@ -154,6 +166,7 @@ class MainHook : XposedModule() {
 
       WebViewClient::class.java.declaredConstructors[0].hookAfter {
         if (it.thisObject::class != WebViewClient::class) {
+          Log.d("WebViewClient subclass: ${it.thisObject::class.java.name}")
           WebViewHook.ViewClient = it.thisObject::class.java
           hookWebView()
         }
@@ -161,10 +174,46 @@ class MainHook : XposedModule() {
 
       WebChromeClient::class.java.declaredConstructors[0].hookAfter {
         if (it.thisObject::class != WebChromeClient::class) {
+          Log.d("WebChromeClient subclass: ${it.thisObject::class.java.name}")
           WebViewHook.ChromeClient = it.thisObject::class.java
           hookWebView()
         }
       }
+    }
+  }
+
+  /** Android 9+ exposes the process name directly; older releases need the hidden accessor. */
+  private fun processName(): String =
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        runCatching { Application.getProcessName() }.getOrNull() ?: "?"
+      } else {
+        runCatching {
+              Class.forName("android.app.ActivityThread")
+                  .getDeclaredMethod("currentProcessName")
+                  .apply { isAccessible = true }
+                  .invoke(null) as? String
+            }
+            .getOrNull() ?: "?"
+      }
+
+  /**
+   * Some apps render their pages with the Tencent X5/TBS kernel instead of `android.webkit.WebView`.
+   * ChromeXt only hooks the framework classes, so those pages are never injected; say so explicitly
+   * instead of leaving a silent no-op behind.
+   */
+  private fun detectUnsupportedKernel(packageName: String, classLoader: ClassLoader) {
+    val known =
+        listOf(
+                "com.tencent.smtt.sdk.WebView",
+                "com.tencent.smtt.sdk.WebViewClient",
+                "com.tencent.smtt.sdk.WebChromeClient",
+                "com.tencent.tbs.core.webkit.WebView",
+            )
+            .filter { runCatching { classLoader.loadClass(it) }.isSuccess }
+    if (known.isNotEmpty()) {
+      Log.w(
+          "$packageName ships a Tencent X5/TBS kernel (${known.joinToString()}); ChromeXt only " +
+              "hooks android.webkit.WebView, so pages rendered by X5 are not injected")
     }
   }
 
@@ -195,20 +244,26 @@ class MainHook : XposedModule() {
         runCatching { packageManager.getPackageInfo(packageName, 0).versionName ?: "" }
             .getOrDefault("")
     Chrome.IO.submit {
-      runCatching {
-        val extras =
-            Bundle().apply {
-              putString("package", packageName)
-              putString("label", label)
-              putString("version", versionName)
-            }
-        context.contentResolver.call(
-            Uri.parse("content://org.matrix.chromext.scripts"),
-            "reportHookedApp",
-            null,
-            extras,
-        )
-      }
+      val ok =
+          runCatching {
+                val extras =
+                    Bundle().apply {
+                      putString("package", packageName)
+                      putString("label", label)
+                      putString("version", versionName)
+                    }
+                val result =
+                    context.contentResolver.call(
+                        Uri.parse("content://org.matrix.chromext.scripts"),
+                        "reportHookedApp",
+                        null,
+                        extras,
+                    )
+                result?.getBoolean("ok") == true
+              }
+              .onFailure { Log.d("reportHookedApp($packageName) failed: ${it.message}") }
+              .getOrDefault(false)
+      Log.d("reportHookedApp($packageName) -> $ok")
     }
   }
 
@@ -226,22 +281,34 @@ class MainHook : XposedModule() {
           .getOrNull()
 
   private fun hookWebView() {
-    if (WebViewHook.ChromeClient == null || WebViewHook.ViewClient == null) return
+    if (WebViewHook.ChromeClient == null || WebViewHook.ViewClient == null) {
+      if (!missingClientReported) {
+        missingClientReported = true
+        Log.w(
+            "hookWebView: missing classes (viewClient=${WebViewHook.ViewClient}, " +
+                "chromeClient=${WebViewHook.ChromeClient})")
+      }
+      return
+    }
     if (WebViewHook.WebView == null) {
       runCatching {
-        WebViewHook.WebView = WebView::class.java
-        WebView.setWebContentsDebuggingEnabled(true)
-      }
-          .onFailure { if (BuildConfig.DEBUG) Log.ex(it) }
+            WebViewHook.WebView = WebView::class.java
+            WebView.setWebContentsDebuggingEnabled(true)
+          }
+          .onFailure { Log.ex(it, "Cannot hook android.webkit.WebView") }
     }
+    Log.d(
+        "hookWebView: webView=${WebViewHook.WebView?.name}, " +
+            "viewClient=${WebViewHook.ViewClient?.name}, chromeClient=${WebViewHook.ChromeClient?.name}")
     initHooks(WebViewHook, ContextMenuHook)
   }
 
   private fun initHooks(vararg hook: BaseHook) {
-    hook.forEach {
-      if (it.isInit) return@forEach
-      it.init()
-      if (it.isInit) Log.d("${it.javaClass.simpleName} hooked")
+    hook.forEach { current ->
+      if (current.isInit) return@forEach
+      current.init()
+      if (current.isInit) Log.d("${current.javaClass.simpleName} hooked")
+      else Log.w("${current.javaClass.simpleName} did not initialize")
     }
   }
 }

@@ -48,6 +48,7 @@ import org.matrix.chromext.R
 import org.matrix.chromext.script.HookedApp
 import org.matrix.chromext.script.Script
 import org.matrix.chromext.script.ScriptActivation
+import org.matrix.chromext.utils.Log
 
 sealed interface Screen {
   data object Apps : Screen
@@ -119,6 +120,7 @@ fun ChromeXtApp(
     loadError = false
     val loaded =        withContext(Dispatchers.IO) {
           runCatching {
+            Log.setVerbose(repository.engineConfig().verboseLog)
             val loadedScripts = repository.load()
             val loadedHooked = repository.hookedApps()
             val loadedActivations = repository.activations()
