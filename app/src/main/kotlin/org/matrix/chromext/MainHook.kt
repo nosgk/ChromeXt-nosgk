@@ -41,23 +41,28 @@ class MainHook : XposedModule() {
   /** A WebView host may build many clients before its chrome client appears; warn only once. */
   private var missingClientReported = false
 
+  /** Installed once per process; `onPackageReady` may fire for several loaded packages. */
+  private var applicationHookInstalled = false
+  private var webViewConstructorsHooked = false
+
   override fun onModuleLoaded(param: ModuleLoadedParam) {
     XposedApi.install(this)
     Resource.init(getModuleApplicationInfo().sourceDir)
+    if (param.processName != "?") ModuleLog.setProcessLabel(param.processName.substringBefore(':'))
     Log.d(param.processName + " module loaded")
   }
 
   override fun onPackageReady(param: PackageReadyParam) {
-    Log.d("package ready: ${param.packageName} in ${processName()}")
+    val process = processName()
+    // The process name identifies the host; param.packageName can also be a loaded-code package
+    // such as com.google.android.webview, which must not become the log tag.
+    if (process != "?") ModuleLog.setProcessLabel(process.substringBefore(':'))
+    Log.d("package ready: ${param.packageName} in $process")
     if (param.packageName == "org.matrix.chromext") return
-    // The application context does not exist yet at this point, so attach the system context (the
-    // same one the hook report already uses) and name the process explicitly. Without this the
-    // startup probes are dropped from the shared log, which is exactly when they are needed.
-    val early = systemContext() ?: currentApplication()
-    early?.let {
-      ModuleLog.attach(it, param.packageName)
-      Log.d("diagnostics attached for ${param.packageName} in ${processName()}")
-    }
+    // Neither the Application nor the system context exists yet. Attach on Application.onCreate;
+    // ModuleLog keeps the lines queued until then instead of dropping them.
+    installApplicationHook()
+    attachEarlyContext()
     if (param.packageName != "android") {
       reportHookedApp(param.packageName, param.applicationInfo)
       detectUnsupportedKernel(param.packageName, param.classLoader)
@@ -171,22 +176,55 @@ class MainHook : XposedModule() {
         return
       }
 
-      WebViewClient::class.java.declaredConstructors[0].hookAfter {
-        if (it.thisObject::class != WebViewClient::class) {
-          Log.d("WebViewClient subclass: ${it.thisObject::class.java.name}")
-          WebViewHook.ViewClient = it.thisObject::class.java
-          hookWebView()
+      if (!webViewConstructorsHooked) {
+        webViewConstructorsHooked = true
+        WebViewClient::class.java.declaredConstructors[0].hookAfter {
+          if (it.thisObject::class != WebViewClient::class) {
+            Log.d("WebViewClient subclass: ${it.thisObject::class.java.name}")
+            WebViewHook.ViewClient = it.thisObject::class.java
+            hookWebView()
+          }
         }
-      }
 
-      WebChromeClient::class.java.declaredConstructors[0].hookAfter {
-        if (it.thisObject::class != WebChromeClient::class) {
-          Log.d("WebChromeClient subclass: ${it.thisObject::class.java.name}")
-          WebViewHook.ChromeClient = it.thisObject::class.java
-          hookWebView()
+        WebChromeClient::class.java.declaredConstructors[0].hookAfter {
+          if (it.thisObject::class != WebChromeClient::class) {
+            Log.d("WebChromeClient subclass: ${it.thisObject::class.java.name}")
+            WebViewHook.ChromeClient = it.thisObject::class.java
+            hookWebView()
+          }
         }
       }
     }
+  }
+
+  /**
+   * `onPackageReady` runs before the Application exists, so both the log sink and the hook report
+   * wait for `Application.onCreate`. The framework class is shared by the host app, so the hook
+   * fires with the app instance even when it was installed for a loaded-code package.
+   */
+  private fun installApplicationHook() {
+    if (applicationHookInstalled) return
+    applicationHookInstalled = true
+    runCatching {
+          Application::class.java.getDeclaredMethod("onCreate").hookAfter {
+            val app = it.thisObject as? Application ?: return@hookAfter
+            ModuleLog.attach(app, app.packageName)
+            Log.d("application created: ${app.packageName} in ${processName()}")
+            reportHookedApp(app.packageName, app.applicationInfo, app)
+          }
+        }
+        .onFailure { Log.ex(it, "Cannot hook Application.onCreate") }
+  }
+
+  /**
+   * Some frameworks still expose the system context before the app starts; when they do, attach
+   * right away so even the earliest probes reach the file.
+   */
+  private fun attachEarlyContext() {
+    val ctx = systemContext() ?: currentApplication() ?: return
+    val label = currentApplication()?.packageName ?: processName().substringBefore(':')
+    ModuleLog.attach(ctx, label)
+    Log.d("diagnostics attached early for $label")
   }
 
   /** Android 9+ exposes the process name directly; older releases need the hidden accessor. */
@@ -238,12 +276,19 @@ class MainHook : XposedModule() {
           }
           .getOrNull()
 
-  private fun reportHookedApp(packageName: String, info: ApplicationInfo) {
+  private fun reportHookedApp(
+      packageName: String,
+      info: ApplicationInfo,
+      knownContext: Context? = null,
+  ) {
     if (!reported.add(packageName)) return
-    // Use the system context so the report works before Chrome.init and for apps that are not
-    // browsers at all (user-added WebView hosts). ActivityThread.getSystemContext() is the same
-    // hidden access AndroidAppHelper used internally.
-    val context = systemContext() ?: currentApplication() ?: return
+    // The system context and the Application do not exist at onPackageReady; the
+    // Application.onCreate hook calls this again with a real Context.
+    val context = knownContext ?: systemContext() ?: currentApplication()
+    if (context == null) {
+      reported.remove(packageName)
+      return
+    }
     val packageManager = context.packageManager
     val label =
         runCatching { info.loadLabel(packageManager).toString() }.getOrDefault("")

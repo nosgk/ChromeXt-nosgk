@@ -2,6 +2,16 @@
 
 All notable changes to this fork are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the module's `versionName`.
 
+## [3.15.6] - 2026-11-09
+
+### Fixed
+
+- The log file was still empty on a scoped WebView host even though the module loaded (`package ready` appeared in the LSPosed log). `onPackageReady` runs before both the Application and the system context exist, so no Context was available to attach and every early probe was dropped. `ModuleLog` now queues lines before a Context exists and flushes them once `Application.onCreate` fires (hooked once per process, also used to report the host in `hooked_app`); the process name, not the loaded-code package name (`com.google.android.webview`), is used as the log tag.
+
+### Changed
+
+- The framework `WebViewClient`/`WebChromeClient` constructor hooks are installed once per process instead of once per loaded package.
+
 ## [3.15.5] - 2026-11-09
 
 ### Fixed

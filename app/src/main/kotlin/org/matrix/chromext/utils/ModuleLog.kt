@@ -47,16 +47,23 @@ object ModuleLog {
       }
 
   /**
-   * Called from every process that wants its `Log` lines to reach the shared file.
-   *
-   * [label] names the process in the log. A hooked app passes its package name because at
-   * `onPackageReady` the application context does not exist yet and only the system context is
-   * available; attaching it anyway is what makes the startup hook probes reach the file.
+   * Names the process in the log without needing a Context. `onPackageReady` runs before the
+   * Application (and even the system context) exists, so this is what lets the startup probes be
+   * queued with the right tag and flushed once a Context arrives.
    */
-  fun attach(ctx: Context, label: String = ctx.packageName ?: "?") {
+  fun setProcessLabel(label: String) {
+    if (label.isNotBlank() && label != "?") processLabel = label
+  }
+
+  /**
+   * Called from every process that wants its `Log` lines to reach the shared file. Lines queued
+   * before this call are kept and flushed now.
+   */
+  fun attach(ctx: Context, label: String = ctx.packageName ?: processLabel) {
     context = ctx.applicationContext ?: ctx
-    processLabel = label
-    moduleProcess = label == MODULE_PACKAGE
+    setProcessLabel(label)
+    moduleProcess = processLabel == MODULE_PACKAGE
+    scheduleFlush()
   }
 
   /** The context to use for provider calls when `Chrome` has no tab yet. */
@@ -64,12 +71,18 @@ object ModuleLog {
 
   fun file(context: Context): File = File(File(context.filesDir, LOG_DIR), LOG_NAME)
 
+  private fun scheduleFlush() {
+    if (context == null) return
+    if (!scheduled.compareAndSet(false, true)) return
+    runCatching { Chrome.IO.submit { flush() } }
+  }
+
   /**
    * Queues one line. Returns immediately; the actual write (or provider upload) happens on
-   * [Chrome.IO]. A process that never called [attach] silently drops the line.
+   * [Chrome.IO]. Before a Context exists the line stays queued instead of being dropped, so the
+   * startup hook probes survive until `Application.onCreate` attaches the app context.
    */
   fun append(message: String) {
-    if (context == null) return
     if (message.isBlank()) return
     val tag = "$processLabel#${android.os.Process.myPid()}"
     val line = formatLine(System.currentTimeMillis(), tag, message)
@@ -77,20 +90,23 @@ object ModuleLog {
       if (queue.size >= MAX_QUEUE) queue.removeFirst()
       queue.addLast(line)
     }
-    if (!scheduled.compareAndSet(false, true)) return
-    runCatching { Chrome.IO.submit { flush() } }
+    scheduleFlush()
   }
 
   private fun flush() {
+    val ctx = context
+    // Release the slot before reading the queue: a line appended during the upload schedules the
+    // next flush instead of waiting for an unrelated append.
+    scheduled.set(false)
+    // No context yet: keep the queue for the moment Application.onCreate attaches one.
+    if (ctx == null) return
     val batch =
         synchronized(queue) {
           val copy = queue.toList()
           queue.clear()
           copy
         }
-    scheduled.set(false)
     if (batch.isEmpty()) return
-    val ctx = context ?: return
     if (moduleProcess) {
       write(ctx, batch)
       return
