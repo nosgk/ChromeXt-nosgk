@@ -16,6 +16,8 @@ data class EngineConfig(
     val allowPrivileged: Boolean = true,
     val injectionEnabled: Boolean = true,
     val installConfirm: Boolean = true,
+    /** Serve GM_xmlhttpRequest GETs from Download/ChromeXT/resources and cache successful ones. */
+    val resourceCache: Boolean = true,
 ) {
   fun toMap(): Map<String, String> =
       mapOf(
@@ -27,6 +29,7 @@ data class EngineConfig(
           KEY_ALLOW_PRIVILEGED to allowPrivileged.toString(),
           KEY_INJECTION to injectionEnabled.toString(),
           KEY_INSTALL_CONFIRM to installConfirm.toString(),
+          KEY_RESOURCE_CACHE to resourceCache.toString(),
       )
 
   companion object {
@@ -38,6 +41,7 @@ data class EngineConfig(
     const val KEY_ALLOW_PRIVILEGED = "allow_privileged"
     const val KEY_INJECTION = "injection_enabled"
     const val KEY_INSTALL_CONFIRM = "install_confirm"
+    const val KEY_RESOURCE_CACHE = "resource_cache"
 
     fun from(values: Map<String, String>): EngineConfig =
         EngineConfig(
@@ -49,6 +53,7 @@ data class EngineConfig(
             allowPrivileged = values[KEY_ALLOW_PRIVILEGED].toBooleanOrDefault(true),
             injectionEnabled = values[KEY_INJECTION].toBooleanOrDefault(true),
             installConfirm = values[KEY_INSTALL_CONFIRM].toBooleanOrDefault(true),
+            resourceCache = values[KEY_RESOURCE_CACHE].toBooleanOrDefault(true),
         )
 
     private fun String?.toBooleanOrDefault(default: Boolean): Boolean =

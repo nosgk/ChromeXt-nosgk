@@ -76,6 +76,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.matrix.chromext.R
 import org.matrix.chromext.script.Script
+import org.matrix.chromext.script.ScriptActivation
 import org.matrix.chromext.script.parseScript
 import org.matrix.chromext.utils.matching
 
@@ -94,11 +95,21 @@ private enum class ScriptSort {
 
 private const val MAX_SCRIPT_BYTES = 4 * 1024 * 1024
 
+private fun formatActivationTime(timestamp: Long): String =
+    runCatching {
+          java.text.DateFormat.getDateTimeInstance(
+                  java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
+              .format(java.util.Date(timestamp))
+        }
+        .getOrDefault("")
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScriptListScreen(
     modifier: Modifier,
     scripts: List<Script>,
+    activations: Map<String, ScriptActivation>,
+    appLabels: Map<String, String>,
     loading: Boolean,
     refreshing: Boolean,
     loadError: Boolean,
@@ -391,6 +402,8 @@ fun ScriptListScreen(
                 ScriptCard(
                     modifier = Modifier.animateItem(),
                     script = script,
+                    activation = activations[script.id],
+                    appLabels = appLabels,
                     update = updates[script.id]?.takeIf { it.hasUpdate },
                     onClick = { onEdit(script) },
                     onToggle = { onToggle(script.id, it) },
@@ -471,6 +484,8 @@ fun ScriptListScreen(
 private fun ScriptCard(
     modifier: Modifier,
     script: Script,
+    activation: ScriptActivation?,
+    appLabels: Map<String, String>,
     update: UpdateInfo?,
     onClick: () -> Unit,
     onToggle: (Boolean) -> Unit,
@@ -489,6 +504,21 @@ private fun ScriptCard(
         )
         Switch(checked = script.enabled, onCheckedChange = onToggle)
       }
+      Text(
+          text =
+              if (activation == null) stringResource(R.string.script_not_activated)
+              else
+                  stringResource(
+                      R.string.script_activated,
+                      appLabels[activation.packageName] ?: activation.packageName,
+                      formatActivationTime(activation.lastActive)),
+          style = MaterialTheme.typography.labelSmall,
+          color =
+              if (activation == null) MaterialTheme.colorScheme.onSurfaceVariant
+              else MaterialTheme.colorScheme.primary,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+      )
       if (script.description.isNotBlank()) {
         Text(
             text = script.description,

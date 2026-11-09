@@ -47,6 +47,7 @@ import kotlinx.coroutines.withContext
 import org.matrix.chromext.R
 import org.matrix.chromext.script.HookedApp
 import org.matrix.chromext.script.Script
+import org.matrix.chromext.script.ScriptActivation
 
 sealed interface Screen {
   data object Apps : Screen
@@ -71,6 +72,7 @@ private fun isSelected(destination: Screen, current: Screen): Boolean =
 private data class Loaded(
     val scripts: List<Script>,
     val hooked: List<HookedApp>,
+    val activations: List<ScriptActivation>,
     val apps: List<AppEntry>,
     val scope: ScopeResult,
 )
@@ -90,6 +92,7 @@ fun ChromeXtApp(
 
   var scripts by remember { mutableStateOf<List<Script>>(emptyList()) }
   var hookedApps by remember { mutableStateOf<List<HookedApp>>(emptyList()) }
+  var activations by remember { mutableStateOf<Map<String, ScriptActivation>>(emptyMap()) }
   var apps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
   var scopeResult by remember { mutableStateOf(ScopeResult()) }
   var includeAllApps by rememberSaveable { mutableStateOf(false) }
@@ -110,15 +113,16 @@ fun ChromeXtApp(
   LaunchedEffect(reload) {
     loading = true
     loadError = false
-    val loaded =
-        withContext(Dispatchers.IO) {
+    val loaded =        withContext(Dispatchers.IO) {
           runCatching {
             val loadedScripts = repository.load()
             val loadedHooked = repository.hookedApps()
+            val loadedActivations = repository.activations()
             val scopeRead = LsposedScope.read(context)
             Loaded(
                 scripts = loadedScripts,
                 hooked = loadedHooked,
+                activations = loadedActivations,
                 apps = loadApps(context, loadedHooked, loadedScripts, scopeRead.packages),
                 scope = scopeRead,
             )
@@ -128,12 +132,21 @@ fun ChromeXtApp(
         .onSuccess {
           scripts = it.scripts
           hookedApps = it.hooked
+          activations =
+              it.activations
+                  .groupBy { activation -> activation.scriptId }
+                  .mapValues { entry -> entry.value.maxByOrNull { a -> a.lastActive }!! }
           apps = it.apps
           scopeResult = it.scope
         }
         .onFailure { loadError = true }
     loading = false
     refreshing = false
+  }
+
+  // Older installs have no hydrated @require payloads; fetch them once in the background.
+  LaunchedEffect(Unit) {
+    withContext(Dispatchers.IO) { runCatching { repository.hydrateMissing() } }
   }
 
   LaunchedEffect(editId, scripts) {
@@ -151,7 +164,15 @@ fun ChromeXtApp(
 
   fun toggle(id: String, enabled: Boolean) {
     scripts = scripts.map { if (it.id == id) it.copy(enabled = enabled) else it }
-    scope.launch { withContext(Dispatchers.IO) { repository.setEnabled(id, enabled) } }
+    scope.launch {
+      val saved = withContext(Dispatchers.IO) { repository.setEnabled(id, enabled) }
+      if (saved) {
+        showMessage(context.getString(R.string.toggle_saved))
+      } else {
+        scripts = scripts.map { if (it.id == id) it.copy(enabled = !enabled) else it }
+        showMessage(context.getString(R.string.toggle_failed))
+      }
+    }
   }
 
   fun delete(script: Script) {
@@ -166,7 +187,10 @@ fun ChromeXtApp(
             if (originalId != null && originalId != script.id) {
               repository.delete(arrayOf(originalId))
             }
-            repository.save(script)
+            // A new script (or one whose id changed) gets its @require/@resource payloads
+            // downloaded now; a plain metadata edit reuses what is already stored.
+            if (originalId == null || originalId != script.id) repository.saveHydrated(script)
+            else repository.save(script)
           }
       if (saved) {
         scripts = scripts.filterNot { it.id == originalId || it.id == script.id } + script
@@ -224,7 +248,7 @@ fun ChromeXtApp(
               lastUpdated = System.currentTimeMillis(),
               lib = script.lib,
           )
-      val saved = withContext(Dispatchers.IO) { repository.save(merged) }
+      val saved = withContext(Dispatchers.IO) { repository.saveHydrated(merged) }
       if (saved) {
         scripts = scripts.map { if (it.id == script.id) merged else it }
         updates = updates - script.id
@@ -253,6 +277,8 @@ fun ChromeXtApp(
       appFilter?.let { packageName ->
         apps.firstOrNull { it.packageName == packageName }?.label ?: packageName
       }
+
+  val appLabels = remember(apps) { apps.associate { it.packageName to it.label } }
 
   BackHandler(enabled = screen !is Screen.Apps) {
     screen = if (screen is Screen.Edit) Screen.List else Screen.Apps
@@ -305,6 +331,7 @@ fun ChromeXtApp(
                     modifier = Modifier.padding(padding),
                     apps = apps,
                     scripts = scripts,
+                    activations = activations,
                     loading = loading,
                     refreshing = refreshing,
                     includeAll = includeAllApps,
@@ -320,6 +347,8 @@ fun ChromeXtApp(
                 ScriptListScreen(
                     modifier = Modifier.padding(padding),
                     scripts = scripts,
+                    activations = activations,
+                    appLabels = appLabels,
                     loading = loading,
                     refreshing = refreshing,
                     loadError = loadError,

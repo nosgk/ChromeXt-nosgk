@@ -18,6 +18,7 @@ class EngineConfigTest {
     assertTrue(config.allowPrivileged)
     assertTrue(config.injectionEnabled)
     assertTrue(config.installConfirm)
+    assertTrue(config.resourceCache)
   }
 
   @Test
@@ -33,6 +34,7 @@ class EngineConfigTest {
                 EngineConfig.KEY_ALLOW_PRIVILEGED to "false",
                 EngineConfig.KEY_INJECTION to "false",
                 EngineConfig.KEY_INSTALL_CONFIRM to "false",
+                EngineConfig.KEY_RESOURCE_CACHE to "false",
             ))
     assertFalse(config.keepStorage)
     assertFalse(config.cspRules)
@@ -42,6 +44,7 @@ class EngineConfigTest {
     assertFalse(config.allowPrivileged)
     assertFalse(config.injectionEnabled)
     assertFalse(config.installConfirm)
+    assertFalse(config.resourceCache)
   }
 
   @Test

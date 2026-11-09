@@ -37,7 +37,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -59,6 +58,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.io.File
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -68,7 +68,10 @@ import org.matrix.chromext.BuildConfig
 import org.matrix.chromext.R
 import org.matrix.chromext.browser.BrowserCatalog
 import org.matrix.chromext.script.EngineConfig
+import org.matrix.chromext.script.LegacyReadResult
 import org.matrix.chromext.script.ScriptDbHelper
+import org.matrix.chromext.script.ScriptFiles
+import org.matrix.chromext.script.ScriptRecord
 import org.matrix.chromext.utils.Su
 
 private data class Telemetry(
@@ -79,8 +82,11 @@ private data class Telemetry(
     val databaseSize: Long,
     val totalScripts: Int,
     val enabledScripts: Int,
+    val activatedScripts: Int,
     val storageBytes: Long,
     val hookedApps: Int,
+    val resourceCount: Int,
+    val resourceBytes: Long,
 )
 
 private data class BrowserInfo(
@@ -114,10 +120,10 @@ fun SettingsScreen(
   var busy by remember { mutableStateOf(false) }
   var storageDatabases by remember { mutableStateOf<List<LocalScriptDatabase>>(emptyList()) }
   var scanningStorage by remember { mutableStateOf(false) }
-  var importingPackage by remember { mutableStateOf<String?>(null) }
+  var importing by remember { mutableStateOf(false) }
   var scanError by remember { mutableStateOf<String?>(null) }
-  var showManualImport by remember { mutableStateOf(false) }
-  var manualPath by remember { mutableStateOf("") }
+  var importPreview by remember { mutableStateOf<ImportPreview?>(null) }
+  var importingLabel by remember { mutableStateOf<String?>(null) }
 
   fun loadTelemetry() {
     scope.launch {
@@ -140,6 +146,13 @@ fun SettingsScreen(
             val records = repository.records()
             val storageBytes =
                 records.sumOf { (it.storage?.toByteArray(Charsets.UTF_8)?.size ?: 0).toLong() }
+            val activated = repository.activations().mapTo(mutableSetOf()) { it.scriptId }
+            val resourcesDir = File(context.filesDir, "resources")
+            val resourceFiles =
+                runCatching {
+                      resourcesDir.walkTopDown().filter { it.isFile }.toList()
+                    }
+                    .getOrDefault(emptyList())
             Telemetry(
                 providerReady = ready,
                 latencyMs = latency,
@@ -148,8 +161,11 @@ fun SettingsScreen(
                 databaseSize = repository.databaseSize(),
                 totalScripts = records.size,
                 enabledScripts = records.count { it.enabled },
+                activatedScripts = records.count { it.id in activated },
                 storageBytes = storageBytes,
                 hookedApps = repository.hookedApps().size,
+                resourceCount = resourceFiles.size,
+                resourceBytes = resourceFiles.sumOf { it.length() },
             )
           }
       telemetry = loaded
@@ -188,32 +204,34 @@ fun SettingsScreen(
     }
   }
 
-  fun importDatabase(database: LocalScriptDatabase, onDone: () -> Unit = {}) {
-    importingPackage = database.packageName
+  fun existingIds(): Set<String> = repository.records().mapTo(mutableSetOf()) { it.id }
+
+  fun showPreview(preview: ImportPreview) {
+    when {
+      preview.error != null ->
+          onMessage(context.getString(R.string.settings_storage_import_failed, preview.error))
+      preview.valid.isEmpty() -> onMessage(context.getString(R.string.settings_storage_none))
+      else -> importPreview = preview
+    }
+  }
+
+  fun previewDatabase(database: LocalScriptDatabase) {
+    if (importing) return
+    importing = true
+    importingLabel = database.label
     scope.launch {
-      val outcome =
+      val preview =
           withContext(Dispatchers.IO) {
-            ScriptStorage.import(context, database, repository::insertIfAbsent)
+            previewFromRecords(ScriptStorage.read(context, database), existingIds())
           }
-      importingPackage = null
-      if (outcome.error != null) {
-        onMessage(context.getString(R.string.settings_storage_import_failed, outcome.error))
-      } else {
-        onMessage(
-            context.getString(
-                R.string.settings_storage_imported,
-                outcome.imported,
-                outcome.skipped,
-                outcome.invalid))
-        onChanged()
-        loadTelemetry()
-      }
-      onDone()
+      importing = false
+      importingLabel = null
+      showPreview(preview)
     }
   }
 
   fun importAll() {
-    if (importingPackage != null) return
+    if (importing) return
     if (storageDatabases.none { it.checked }) {
       // Nothing has been probed yet; scan once and continue.
       scanningStorage = true
@@ -229,12 +247,46 @@ fun SettingsScreen(
       onMessage(context.getString(R.string.settings_storage_none))
       return
     }
-    val iterator = pending.iterator()
-    fun next() {
-      if (!iterator.hasNext()) return
-      importDatabase(iterator.next(), onDone = { next() })
+    importing = true
+    importingLabel = context.getString(R.string.settings_storage_import_all)
+    scope.launch {
+      val preview =
+          withContext(Dispatchers.IO) {
+            val ids = existingIds()
+            val records = mutableListOf<ScriptRecord>()
+            var invalid = 0
+            pending.forEach { database ->
+              val result = ScriptStorage.read(context, database)
+              if (result.error == null) {
+                records += result.records
+                invalid += result.invalid
+              }
+            }
+            previewFromRecords(LegacyReadResult(records.distinctBy { it.id }, invalid), ids)
+          }
+      importing = false
+      importingLabel = null
+      showPreview(preview)
     }
-    next()
+  }
+
+  fun confirmImport(records: List<ScriptRecord>, overwrite: Boolean) {
+    importPreview = null
+    importing = true
+    importingLabel = context.getString(R.string.settings_storage_importing)
+    scope.launch {
+      val result = withContext(Dispatchers.IO) { repository.importRecords(records, overwrite) }
+      importing = false
+      importingLabel = null
+      onMessage(
+          context.getString(
+              R.string.settings_storage_imported,
+              result.imported,
+              result.skipped,
+              result.invalid))
+      onChanged()
+      loadTelemetry()
+    }
   }
 
   fun updateEngine(updated: EngineConfig) {
@@ -267,6 +319,30 @@ fun SettingsScreen(
               onChanged()
               loadTelemetry()
             }
+          }
+        }
+      }
+
+  val scriptFileLauncher =
+      rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+          importing = true
+          importingLabel = context.getString(R.string.settings_storage_pick_file)
+          scope.launch {
+            val preview =
+                withContext(Dispatchers.IO) {
+                  val ids = existingIds()
+                  if (looksLikeSqlite(context, uri)) {
+                    previewFromRecords(ScriptStorage.read(context, uri), ids)
+                  } else {
+                    val text = readTextLimited(context, uri, 4 * 1024 * 1024)
+                    if (text == null) ImportPreview(error = "read failed")
+                    else previewFromText(text, ids)
+                  }
+                }
+            importing = false
+            importingLabel = null
+            showPreview(preview)
           }
         }
       }
@@ -311,17 +387,17 @@ fun SettingsScreen(
             centralPath = telemetry?.databasePath ?: "",
             centralSize = telemetry?.databaseSize ?: 0L,
             centralCount = telemetry?.totalScripts ?: 0,
+            resourceCount = telemetry?.resourceCount ?: 0,
+            resourceBytes = telemetry?.resourceBytes ?: 0L,
             databases = storageDatabases,
             scanning = scanningStorage,
-            importingPackage = importingPackage,
+            importing = importing,
+            importingLabel = importingLabel,
             scanError = scanError,
             onScan = { scanStorage() },
-            onImport = { importDatabase(it) },
+            onPreview = { previewDatabase(it) },
             onImportAll = { importAll() },
-            onManual = {
-              manualPath = ""
-              showManualImport = true
-            },
+            onPickFile = { scriptFileLauncher.launch(arrayOf("*/*")) },
         )
       }
       item(key = "appearance") {
@@ -367,49 +443,11 @@ fun SettingsScreen(
     }
   }
 
-  if (showManualImport) {
-    AlertDialog(
-        onDismissRequest = { showManualImport = false },
-        title = { Text(stringResource(R.string.settings_storage_manual_title)) },
-        text = {
-          Column {
-            Text(
-                stringResource(R.string.settings_storage_manual_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            OutlinedTextField(
-                value = manualPath,
-                onValueChange = { manualPath = it },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                singleLine = true,
-                placeholder = { Text(stringResource(R.string.settings_storage_manual_path)) },
-            )
-          }
-        },
-        confirmButton = {
-          TextButton(
-              enabled = manualPath.isNotBlank() && importingPackage == null,
-              onClick = {
-                val database =
-                    LocalScriptDatabase(
-                        packageName = "manual",
-                        label = context.getString(R.string.settings_storage_manual_label),
-                        path = manualPath.trim(),
-                        checked = true,
-                        exists = true,
-                    )
-                showManualImport = false
-                importDatabase(database)
-              }) {
-                Text(stringResource(R.string.settings_storage_import))
-              }
-        },
-        dismissButton = {
-          TextButton(onClick = { showManualImport = false }) {
-            Text(stringResource(R.string.action_cancel))
-          }
-        },
+  importPreview?.let { preview ->
+    ImportPreviewDialog(
+        preview = preview,
+        onDismiss = { importPreview = null },
+        onConfirm = { records, overwrite -> confirmImport(records, overwrite) },
     )
   }
 
@@ -528,7 +566,10 @@ private fun TelemetryCard(telemetry: Telemetry?, onPing: () -> Unit) {
           Metric(
               title = stringResource(R.string.settings_metric_payload),
               value = "${value.enabledScripts}/${value.totalScripts}",
-              detail = stringResource(R.string.settings_storage_size, formatBytes(value.storageBytes)),
+              detail =
+                  stringResource(R.string.settings_storage_size, formatBytes(value.storageBytes)) +
+                      " · " +
+                      stringResource(R.string.settings_activated_count, value.activatedScripts),
               modifier = Modifier.weight(1f),
           )
           Metric(
@@ -757,6 +798,12 @@ private fun EngineCard(engine: EngineConfig, onChange: (EngineConfig) -> Unit) {
           hint = stringResource(R.string.settings_engine_install_confirm_hint),
           checked = engine.installConfirm,
           onCheckedChange = { onChange(engine.copy(installConfirm = it)) },
+      )
+      EngineSwitch(
+          title = stringResource(R.string.settings_engine_resource_cache),
+          hint = stringResource(R.string.settings_engine_resource_cache_hint),
+          checked = engine.resourceCache,
+          onCheckedChange = { onChange(engine.copy(resourceCache = it)) },
       )
       Text(
           stringResource(R.string.settings_engine_pending),
@@ -992,20 +1039,43 @@ private fun StorageCard(
     centralPath: String,
     centralSize: Long,
     centralCount: Int,
+    resourceCount: Int,
+    resourceBytes: Long,
     databases: List<LocalScriptDatabase>,
     scanning: Boolean,
-    importingPackage: String?,
+    importing: Boolean,
+    importingLabel: String?,
     scanError: String?,
     onScan: () -> Unit,
-    onImport: (LocalScriptDatabase) -> Unit,
+    onPreview: (LocalScriptDatabase) -> Unit,
     onImportAll: () -> Unit,
-    onManual: () -> Unit,
+    onPickFile: () -> Unit,
 ) {
   Card(modifier = Modifier.fillMaxWidth()) {
     Column(modifier = Modifier.padding(14.dp)) {
       Text(
           stringResource(R.string.settings_storage_title),
           style = MaterialTheme.typography.titleMedium,
+      )
+      Text(
+          stringResource(R.string.settings_storage_unified),
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.padding(top = 8.dp),
+      )
+      SelectionContainer {
+        Text(
+            ScriptFiles.rootPath(),
+            style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
+        )
+      }
+      Text(
+          stringResource(
+              R.string.settings_storage_resources,
+              resourceCount,
+              formatBytes(resourceBytes)),
+          style = MaterialTheme.typography.labelSmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
       Text(
           stringResource(R.string.settings_storage_central),
@@ -1041,13 +1111,20 @@ private fun StorageCard(
         }
         TextButton(
             onClick = onImportAll,
-            enabled = importingPackage == null && databases.any { it.exists },
+            enabled = !importing && databases.any { it.exists },
         ) {
           Text(stringResource(R.string.settings_storage_import_all))
         }
-        TextButton(onClick = onManual) {
-          Text(stringResource(R.string.settings_storage_manual))
+        TextButton(onClick = onPickFile, enabled = !importing) {
+          Text(stringResource(R.string.settings_storage_pick_file))
         }
+      }
+      importingLabel?.let {
+        Text(
+            it,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
       }
       scanError?.let {
         Text(
@@ -1083,14 +1160,10 @@ private fun StorageCard(
               )
             } else {
               TextButton(
-                  onClick = { onImport(database) },
-                  enabled = database.exists && importingPackage == null,
+                  onClick = { onPreview(database) },
+                  enabled = database.exists && !importing,
               ) {
-                Text(
-                    stringResource(
-                        if (importingPackage == database.packageName)
-                            R.string.settings_storage_importing
-                        else R.string.settings_storage_import))
+                Text(stringResource(R.string.settings_storage_import))
               }
             }
           }
@@ -1152,6 +1225,35 @@ private fun formatBytes(bytes: Long): String =
       bytes >= 1024L -> String.format(Locale.US, "%.1f KB", bytes / 1024.0)
       else -> "$bytes B"
     }
+
+/** Detects an upstream SQLite database picked through the system file picker. */
+private fun looksLikeSqlite(context: Context, uri: Uri): Boolean =
+    runCatching {
+          context.contentResolver.openInputStream(uri)?.use { input ->
+            val header = ByteArray(16)
+            val read = input.read(header)
+            read == 16 && String(header, Charsets.ISO_8859_1).startsWith("SQLite format 3")
+          } ?: false
+        }
+        .getOrDefault(false)
+
+private fun readTextLimited(context: Context, uri: Uri, maxBytes: Int): String? =
+    runCatching {
+          context.contentResolver.openInputStream(uri)?.use { input ->
+            val output = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(8192)
+            var total = 0
+            while (true) {
+              val read = input.read(buffer)
+              if (read < 0) break
+              total += read
+              if (total > maxBytes) return@runCatching null
+              output.write(buffer, 0, read)
+            }
+            output.toString("UTF-8")
+          }
+        }
+        .getOrNull()
 
 private fun Drawable.toBrowserIconBitmap(size: Int): Bitmap {
   if (this is BitmapDrawable && bitmap != null) {

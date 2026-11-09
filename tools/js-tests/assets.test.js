@@ -47,3 +47,21 @@ test("the in-page install editor stays self-contained", () => {
   const text = read("app/src/main/assets/editor.js");
   assert.doesNotMatch(text, /unpkg\.com/, "editor.js must not depend on a CDN");
 });
+
+test("the install editor is localized and resilient", () => {
+  const text = read("app/src/main/assets/editor.js");
+  assert.match(text, /确认安装/, "the confirm button must be localized");
+  assert.match(text, /findCodeNode/, "the code element lookup must not be a single selector");
+  assert.doesNotMatch(
+    text,
+    /return prepareDOM\(\);/,
+    "sandboxed pages must not recurse synchronously",
+  );
+});
+
+test("GM.js reports real activation and consumes local resources", () => {
+  const text = read("app/src/main/assets/GM.js");
+  assert.match(text, /dispatch\("scriptActive"/);
+  assert.match(text, /resourceData/);
+  assert.match(text, /URL\.createObjectURL/);
+});

@@ -13,6 +13,7 @@ import org.matrix.chromext.utils.findMethod
 import org.matrix.chromext.utils.findMethodOrNull
 import org.matrix.chromext.utils.hookAfter
 import org.matrix.chromext.utils.hookBefore
+import org.matrix.chromext.utils.isUserScript
 
 object UserScriptHook : BaseHook() {
 
@@ -51,7 +52,15 @@ object UserScriptHook : BaseHook() {
           if (url.isEmpty() && proxy.getUrl != null) {
             url = proxy.parseUrl(proxy.getUrl(tab))!!
           }
-          if (!url.startsWith("chrome") && proxy.isLoading(tab)) {
+          // onUpdateTargetUrl also reports hovered links. Only a user-script URL that is already
+          // the tab's current URL may force injection when the loading flag is false; otherwise a
+          // hovered .user.js link would mount the install editor on an unrelated page.
+          val current = runCatching {
+                proxy.getUrl?.let { getUrl -> proxy.parseUrl(getUrl(tab)) }
+              }
+              .getOrNull()
+          val userScriptPage = isUserScript(url) && current != null && url == current
+          if (!url.startsWith("chrome") && (proxy.isLoading(tab) || userScriptPage)) {
             ScriptDbManager.invokeScript(url)
           }
         }
@@ -104,6 +113,7 @@ object UserScriptHook : BaseHook() {
     findMethod(proxy.chromeTabbedActivity, true) { name == "onStop" }
         .hookBefore {
           ScriptDbManager.updateScriptStorage()
+          ScriptDbManager.flushActivations()
           HttpResponseCache.getInstalled()?.let { cache ->
             Log.d("HttpResponseCache: Hit ${cache.hitCount} / NetWork ${cache.networkCount}")
             cache.flush()

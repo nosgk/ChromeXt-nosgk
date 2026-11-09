@@ -5,6 +5,8 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.webkit.WebView
+import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import org.json.JSONArray
 import org.json.JSONObject
@@ -25,18 +27,27 @@ import org.matrix.chromext.utils.shouldBypassSandbox
 object ScriptDbManager {
 
   private const val PREFS = "ChromeXt"
-  private const val MIGRATED_KEY = "migrated_to_central_v13"
+  private const val LEGACY_IMPORTED_KEY = "legacy_userscript_imported_v13"
+  private const val CACHE_FILE = "chromext-scripts.json"
+  private const val REVISION_INTERVAL_MS = 1_000L
+  private const val ACTIVATION_FLUSH_MS = 60_000L
 
   // Read from page-injection threads while actions may add/remove scripts from the UI thread.
-  val scripts: MutableList<Script> = CopyOnWriteArrayList(query())
+  val scripts: MutableList<Script> = CopyOnWriteArrayList(loadCache())
   val cosmeticFilters: MutableMap<String, String>
   val userAgents: MutableMap<String, String>
   val cspRules: MutableMap<String, String>
   var keepStorage: Boolean
 
-  @Volatile private var lastRefresh = 0L
-  @Volatile private var localMirrored = false
-  @Volatile private var canMirror = false
+  /** Whether the central provider answered the last sync; shown by the manager telemetry. */
+  @Volatile var providerReady = false
+    private set
+
+  @Volatile private var lastRevisionCheck = 0L
+  @Volatile private var cachedRevision = -1L
+  @Volatile private var lastActivationFlush = 0L
+
+  private val pendingActivations = ConcurrentHashMap<String, Long>()
 
   /** Engine switches pulled from the central config table; defaults match pre-3.10 behavior. */
   @Volatile var engine = EngineConfig()
@@ -62,152 +73,115 @@ object ScriptDbManager {
     Chrome.IO.submit { syncWithCentral() }
   }
 
-  fun insert(vararg script: Script) {
-    val store = ScriptStore(Chrome.getContext())
+  /**
+   * Stores scripts through the central provider. Returns false when the module process could not
+   * be reached, so the caller can report a real failure instead of silently losing the script.
+   */
+  fun insert(vararg script: Script): Boolean {
+    var ok = true
     script.forEach {
       val existing = scripts.find { s -> s.id == it.id }
-      if (existing != null && keepStorage) it.storage = existing.storage
+      val toStore = if (existing != null && keepStorage) it.copy(storage = existing.storage) else it
       val record =
-          it.toRecord().let { r ->
+          toStore.toRecord().let { r ->
             if (r.lastUpdated == 0L) r.copy(lastUpdated = System.currentTimeMillis()) else r
           }
-      if (store.upsert(record)) {
+      if (CentralBridge.upsert(record)) {
         scripts.removeAll(scripts.filter { s -> s.id == it.id })
-        scripts.add(it.copy(lastUpdated = record.lastUpdated))
-        Chrome.IO.submit { CentralBridge.upsert(record) }
+        scripts.add(toStore.copy(lastUpdated = record.lastUpdated))
       } else {
-        Log.e("Fail to store script ${it.id} into SQL database.")
+        Log.e("Fail to store script ${it.id} in the central database.")
+        ok = false
       }
     }
-    store.close()
+    if (ok) {
+      saveCache()
+      cachedRevision = CentralBridge.revision() ?: cachedRevision
+    }
+    return ok
   }
 
-  fun delete(ids: Array<String>) {
-    if (ids.isEmpty()) return
-    val store = ScriptStore(Chrome.getContext())
-    store.delete(ids)
-    store.close()
+  fun delete(ids: Array<String>): Boolean {
+    if (ids.isEmpty()) return true
+    val ok = CentralBridge.delete(ids)
     scripts.removeAll(scripts.filter { ids.contains(it.id) })
-    Chrome.IO.submit { CentralBridge.delete(ids) }
+    saveCache()
+    if (ok) cachedRevision = CentralBridge.revision() ?: cachedRevision
+    return ok
   }
 
-  fun setEnabled(id: String, enabled: Boolean) {
-    val store = ScriptStore(Chrome.getContext())
-    store.setEnabled(id, enabled)
-    store.close()
-    val index = scripts.indexOfFirst { it.id == id }
-    if (index >= 0) scripts[index] = scripts[index].copy(enabled = enabled)
-    Chrome.IO.submit { CentralBridge.setEnabled(id, enabled) }
+  fun setEnabled(id: String, enabled: Boolean): Boolean {
+    val ok = CentralBridge.setEnabled(id, enabled)
+    if (ok) {
+      val index = scripts.indexOfFirst { it.id == id }
+      if (index >= 0) scripts[index] = scripts[index].copy(enabled = enabled)
+      saveCache()
+      cachedRevision = CentralBridge.revision() ?: cachedRevision
+    }
+    return ok
   }
 
-  /** Pull the central database when it is reachable; keep the local list otherwise. */
+  /** Pull the central database when it is reachable; keep the cached list otherwise. */
   fun refreshFromCentral(records: List<ScriptRecord>? = null) {
     val source = records ?: CentralBridge.queryRecords() ?: return
-    val previous = scripts.toList()
-    val loaded =
-        source
-            .mapNotNull { record ->
-              val existing = scripts.find { it.id == record.id }
-              val parsed =
-                  parseScript(
-                      record.meta + record.code,
-                      record.storage,
-                      hydrateRequires = existing == null,
-                  )
-              if (parsed == null || parsed.id != record.id) {
-                null
-              } else {
-                parsed.copy(
-                    enabled = record.enabled,
-                    sortOrder = record.sortOrder,
-                    customMatch = record.customMatch,
-                    customInclude = record.customInclude,
-                    customExclude = record.customExclude,
-                    customRunAt = record.customRunAt,
-                    updateUrl = record.updateUrl,
-                    iconUrl = record.iconUrl,
-                    lastUpdated = record.lastUpdated,
-                    apps = parseApps(record.apps),
-                    lib = existing?.lib ?: emptyList(),
-                )
-              }
-            }
-            .toMutableList()
-    if (!canMirror) {
-      // Migration has not been confirmed yet: keep scripts that only exist in the browser-local
-      // database in the injected list instead of dropping them on the first central refresh.
-      val centralIds = source.mapTo(mutableSetOf()) { it.id }
-      previous.filter { it.id !in centralIds }.forEach { loaded.add(it) }
-    }
+    val loaded = source.mapNotNull { parseRecord(it) }.toMutableList()
     scripts.clear()
     scripts.addAll(loaded)
-    lastRefresh = System.currentTimeMillis()
-    if (canMirror && !localMirrored) {
-      // Keep the browser-local database in step with the central one, so the next process start
-      // injects the full list before the first sync and deleted scripts do not linger locally.
-      val mirrored = runCatching { mirrorToLocal(source) }.onFailure { Log.ex(it) }.isSuccess
-      if (mirrored) localMirrored = true
-    }
-  }
-
-  private fun mirrorToLocal(records: List<ScriptRecord>) {
-    val store = ScriptStore(Chrome.getContext())
-    try {
-      val local = store.records().associateBy { it.id }
-      val centralIds = records.mapTo(mutableSetOf()) { it.id }
-      records.forEach { record ->
-        // The browser-local GM storage is the freshest copy; never replace it with the central one.
-        val storage = local[record.id]?.storage ?: record.storage
-        store.upsert(record.copy(storage = storage))
-      }
-      val stale = local.keys.filterNot { it in centralIds }
-      if (stale.isNotEmpty()) store.delete(stale.toTypedArray())
-    } finally {
-      store.close()
-    }
+    saveCache(source)
   }
 
   /**
-   * Cheap throttle for the injection path: the provider is queried at most once every two seconds,
-   * on the IO pool, so a page load never blocks on a binder call.
+   * Cheap change check for the injection path: a revision mismatch triggers a full refresh. This
+   * makes manager-side toggles apply on the next page load instead of waiting for onResume or the
+   * old 30 second throttle.
    */
   fun refreshIfStale() {
     val now = System.currentTimeMillis()
-    if (now - lastRefresh < 30_000) return
-    lastRefresh = now
-    Chrome.IO.submit { syncWithCentral() }
+    if (now - lastRevisionCheck < REVISION_INTERVAL_MS) return
+    lastRevisionCheck = now
+    Chrome.IO.submit {
+      val revision = CentralBridge.revision() ?: return@submit
+      if (revision != cachedRevision) syncWithCentral()
+    }
   }
 
   private fun syncWithCentral() {
-    if (!CentralBridge.isAvailable()) return
-    applyConfig(CentralBridge.getConfig() ?: emptyMap())
-    val prefs = Chrome.getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-    val central = CentralBridge.queryRecords() ?: return
-    // Re-run the local migration when the flag is missing *or* the central database is empty.
-    // Reinstalling the module wipes its data but the flag lives in the browser's preferences, so
-    // the old one-shot logic permanently hid scripts that upstream ChromeXt left in this browser's
-    // database.
-    if (!prefs.getBoolean(MIGRATED_KEY, false) || central.isEmpty()) {
-      val inserted = CentralBridge.migrate(scripts.map { it.toRecord() })
-      if (inserted != null) {
-        Log.i("Migrated $inserted scripts to the central database")
-        prefs.edit().putBoolean(MIGRATED_KEY, true).apply()
-        canMirror = true
-        // The snapshot above predates the migration; re-read so the injected list is complete.
-        refreshFromCentral()
-        return
-      }
-      // Migration failed: keep the local-only scripts in memory, but never mirror to local yet.
-      refreshFromCentral(central)
+    if (!CentralBridge.isAvailable()) {
+      providerReady = false
       return
     }
-    canMirror = true
+    providerReady = true
+    applyConfig(CentralBridge.getConfig() ?: emptyMap())
+    importLegacyOnce()
+    val central = CentralBridge.queryRecords() ?: return
+    cachedRevision = CentralBridge.revision() ?: cachedRevision
     refreshFromCentral(central)
   }
 
   /**
+   * Upstream ChromeXt wrote scripts into each browser's own `userscript` database. Import it once,
+   * read-only, so switching builds does not hide old scripts. This fork never writes that file.
+   */
+  private fun importLegacyOnce() {
+    if (Chrome.packageName == null) return
+    val ctx = runCatching { Chrome.getContext() }.getOrNull() ?: return
+    val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    if (prefs.getBoolean(LEGACY_IMPORTED_KEY, false)) return
+    val path = ctx.getDatabasePath(ScriptDbHelper.LEGACY_DATABASE_NAME)
+    if (!path.exists()) {
+      prefs.edit().putBoolean(LEGACY_IMPORTED_KEY, true).apply()
+      return
+    }
+    val result = LegacyDatabase.read(path.path)
+    if (result.error != null) return
+    val inserted = CentralBridge.migrate(result.records) ?: return
+    prefs.edit().putBoolean(LEGACY_IMPORTED_KEY, true).apply()
+    Log.i("Imported $inserted scripts from ${path.path}")
+  }
+
+  /**
    * Applies the central engine switches. The manager process owns the values; browsers only read
-   * them, so a change takes effect on the next sync (page load / 30 s throttle).
+   * them, so a change takes effect on the next sync (page load / revision check).
    */
   private fun applyConfig(values: Map<String, String>) {
     runCatching {
@@ -348,44 +322,85 @@ object ScriptDbManager {
   }
 
   fun updateScriptStorage() {
-    val store = ScriptStore(Chrome.getContext())
     scripts.forEach {
       if (it.storage != null) {
         val json = it.storage.toString()
-        if (store.updateStorage(it.id, json)) {
-          Chrome.IO.submit { CentralBridge.updateStorage(it.id, json) }
-        } else {
+        if (!CentralBridge.updateStorage(it.id, json)) {
           Log.e("Updating scriptStorage failed for: " + it.id)
         }
       }
     }
-    store.close()
   }
 
-  private fun query(): MutableList<Script> {
-    val store = ScriptStore(Chrome.getContext())
-    val records = store.records()
-    store.close()
-    return records
-        .mapNotNull { record ->
-          val parsed = parseScript(record.meta + record.code, record.storage)
-          if (parsed == null || parsed.id != record.id) {
-            null
-          } else {
-            parsed.copy(
-                enabled = record.enabled,
-                sortOrder = record.sortOrder,
-                customMatch = record.customMatch,
-                customInclude = record.customInclude,
-                customExclude = record.customExclude,
-                customRunAt = record.customRunAt,
-                updateUrl = record.updateUrl,
-                iconUrl = record.iconUrl,
-                lastUpdated = record.lastUpdated,
-                apps = parseApps(record.apps),
-            )
-          }
+  /** Called by the `scriptActive` action after a script body actually ran in a page. */
+  fun reportActivation(id: String) {
+    if (id.isBlank()) return
+    pendingActivations[id] = System.currentTimeMillis()
+    val now = System.currentTimeMillis()
+    if (now - lastActivationFlush >= ACTIVATION_FLUSH_MS) flushActivations()
+  }
+
+  /** Sends accumulated activation reports to the central database. */
+  fun flushActivations() {
+    if (pendingActivations.isEmpty()) return
+    val packageName = Chrome.packageName ?: return
+    val rows =
+        pendingActivations.entries.map { (id, timestamp) ->
+          ScriptActivation(id, packageName, timestamp, 1)
         }
-        .toMutableList()
+    pendingActivations.clear()
+    lastActivationFlush = System.currentTimeMillis()
+    Chrome.IO.submit {
+      if (!CentralBridge.reportActivations(rows)) {
+        rows.forEach { pendingActivations[it.scriptId] = it.lastActive }
+      }
+    }
+  }
+
+  private fun parseRecord(record: ScriptRecord): Script? = record.toScript()
+
+  // ---------------------------------------------------------------------------------------------
+  // Browser-local cache. The central database is authoritative; this file only keeps injection
+  // working when the module process cannot be started (OEM background limits, force-stop).
+  // ---------------------------------------------------------------------------------------------
+
+  private fun cacheFile(): File? =
+      runCatching { File(Chrome.getContext().filesDir, CACHE_FILE) }.getOrNull()
+
+  private fun loadCache(): MutableList<Script> {
+    val file = cacheFile()
+    if (file != null && file.isFile) {
+      // The cache is authoritative once it exists, even when it is an empty array: a user who
+      // deleted every script must not have them resurrected from the legacy database below.
+      return runCatching {
+            val array = JSONArray(file.readText())
+            List(array.length()) { index ->
+              parseRecord(ScriptRecord.fromJson(array.getJSONObject(index)))
+            }
+                .filterNotNull()
+                .toMutableList()
+          }
+          .getOrDefault(mutableListOf<Script>())
+    }
+    // First run after the upgrade: seed from the legacy browser database read-only, so the very
+    // first page load still injects scripts before the provider answers.
+    return runCatching {
+          val ctx = Chrome.getContext()
+          val path = ctx.getDatabasePath(ScriptDbHelper.LEGACY_DATABASE_NAME)
+          if (!path.exists()) mutableListOf<Script>()
+          else LegacyDatabase.read(path.path).records.mapNotNull { parseRecord(it) }.toMutableList()
+        }
+        .getOrDefault(mutableListOf<Script>())
+  }
+
+  private fun saveCache(records: List<ScriptRecord>? = null) {
+    val file = cacheFile() ?: return
+    val source = records ?: scripts.map { it.toRecord() }
+    runCatching {
+          val array = JSONArray()
+          source.forEach { array.put(it.toJson()) }
+          file.writeText(array.toString())
+        }
+        .onFailure { Log.d("Cannot write the script cache: ${it.message}") }
   }
 }

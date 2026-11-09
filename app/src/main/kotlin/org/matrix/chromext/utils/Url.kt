@@ -75,13 +75,17 @@ val invalidUserScriptUrls = mutableListOf<String>()
 
 fun isUserScript(url: String?, path: String? = null): Boolean {
   if (url == null) return false
-  if (url.endsWith(".user.js")) {
+  // Query strings and fragments are common on install links (`foo.user.js?v=2`); compare only the
+  // path part. `resolveContentUrl` already returns a display name for content:// URIs.
+  val resolved = path ?: resolveContentUrl(url)
+  val candidate =
+      (if (resolved.isNotBlank()) resolved else url.substringBefore('?').substringBefore('#')).lowercase()
+  if (candidate.endsWith(".user.js")) {
     if (invalidUserScriptUrls.contains(url)) return false
     invalidUserScriptDomains.forEach { if (url.startsWith("https://" + it) == true) return false }
     return true
-  } else {
-    return (path ?: resolveContentUrl(url)).endsWith(".js")
   }
+  return candidate.endsWith(".js")
 }
 
 fun resolveContentUrl(url: String): String {

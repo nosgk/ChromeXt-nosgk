@@ -171,6 +171,13 @@ private fun InstallScriptScreen(
           )
         }
         if (current.description.isNotBlank()) Text(current.description)
+        if (existingFound) {
+          Text(
+              stringResource(R.string.install_already_saved),
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.primary,
+          )
+        }
         Text(
             if (scopedApps.isEmpty()) stringResource(R.string.install_scope_all)
             else stringResource(R.string.install_scope, scopedApps.joinToString(", ")),
@@ -203,7 +210,7 @@ private fun InstallScriptScreen(
                 val updated =
                     current.copy(apps = scopedApps, lastUpdated = System.currentTimeMillis())
                 scope.launch {
-                  withContext(Dispatchers.IO) { repository.save(updated) }
+                  withContext(Dispatchers.IO) { repository.saveHydrated(updated) }
                   onEdit(updated)
                 }
               },
@@ -216,7 +223,7 @@ private fun InstallScriptScreen(
                 val updated =
                     current.copy(apps = scopedApps, lastUpdated = System.currentTimeMillis())
                 scope.launch {
-                  withContext(Dispatchers.IO) { repository.save(updated) }
+                  withContext(Dispatchers.IO) { repository.saveHydrated(updated) }
                   onInstalled()
                 }
               },

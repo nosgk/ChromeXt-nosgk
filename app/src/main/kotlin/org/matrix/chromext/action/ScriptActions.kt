@@ -1,8 +1,10 @@
 package org.matrix.chromext.action
 
+import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 import org.matrix.chromext.Chrome
+import org.matrix.chromext.script.CentralBridge
 import org.matrix.chromext.script.Local
 import org.matrix.chromext.script.ScriptDbManager
 import org.matrix.chromext.script.parseScript
@@ -19,48 +21,61 @@ object ScriptActions : ActionGroup {
                 var callback: String? = null
                 val script = parseScript(context.payload, hydrateRequires = false)
                 if (script == null) {
-                  callback = "alert('Invalid UserScript');"
+                  callback = "alert('${invalidScriptMessage()}');"
                 } else {
                   Log.i("Install script ${script.id}")
-                  // Prefer the native confirmation screen; fall back to the old direct install
-                  // when the module Activity cannot be started (for example, a restricted ROM).
-                  // The engine switch can also skip the confirmation on purpose.
-                  val confirmed =
-                      ScriptDbManager.engine.installConfirm &&
-                          ManagerLauncher.installScript(Chrome.getContext(), context.payload)
-                  if (!confirmed) {
-                    val existing = ScriptDbManager.scripts.find { it.id == script.id }
-                    val currentPackage = Chrome.packageName
-                    val toInsert =
-                        if (existing == null) {
-                          // Installed from this app: scope it here instead of enabling it globally.
-                          script.copy(apps = listOfNotNull(currentPackage))
-                        } else {
-                          // Re-installing keeps the user's enable state, ordering and overrides, and
-                          // adds the app it was installed from to a non-global scope.
-                          val apps =
-                              if (existing.apps.isNotEmpty() &&
-                                  currentPackage != null &&
-                                  currentPackage !in existing.apps) {
-                                existing.apps + currentPackage
-                              } else {
-                                existing.apps
-                              }
-                          script.copy(
-                              enabled = existing.enabled,
-                              sortOrder = existing.sortOrder,
-                              customMatch = existing.customMatch,
-                              customInclude = existing.customInclude,
-                              customExclude = existing.customExclude,
-                              customRunAt = existing.customRunAt,
-                              apps = apps,
-                              lib = existing.lib,
-                          )
-                        }
-                    ScriptDbManager.insert(toInsert)
+                  val existing = ScriptDbManager.scripts.find { it.id == script.id }
+                  val currentPackage = Chrome.packageName
+                  val toInsert =
+                      if (existing == null) {
+                        // Installed from this app: scope it here instead of enabling it globally.
+                        script.copy(apps = listOfNotNull(currentPackage))
+                      } else {
+                        // Re-installing keeps the user's enable state, ordering and overrides, and
+                        // adds the app it was installed from to a non-global scope.
+                        val apps =
+                            if (existing.apps.isNotEmpty() &&
+                                currentPackage != null &&
+                                currentPackage !in existing.apps) {
+                              existing.apps + currentPackage
+                            } else {
+                              existing.apps
+                            }
+                        script.copy(
+                            enabled = existing.enabled,
+                            sortOrder = existing.sortOrder,
+                            customMatch = existing.customMatch,
+                            customInclude = existing.customInclude,
+                            customExclude = existing.customExclude,
+                            customRunAt = existing.customRunAt,
+                            apps = apps,
+                            lib = existing.lib,
+                            resources = existing.resources,
+                        )
+                      }
+                  // Install first. A blocked background activity start (ColorOS and other OEM
+                  // restrictions) must not lose the script; the native screen is only a review
+                  // step now.
+                  if (!ScriptDbManager.insert(toInsert)) {
+                    callback = "alert('${installFailedMessage()}');"
+                  } else {
+                    // @require/@resource payloads are downloaded in the module process, which owns
+                    // the network permission and the resources directory.
+                    Chrome.IO.submit { CentralBridge.hydrate(script.id) }
+                    if (ScriptDbManager.engine.installConfirm) {
+                      val ctx = runCatching { Chrome.getContext() }.getOrNull()
+                      if (ctx != null && !ManagerLauncher.installScript(ctx, context.payload)) {
+                        ManagerLauncher.notifyInstalled(ctx, toInsert.id)
+                      }
+                    }
                   }
                 }
                 callback
+              },
+          "scriptActive" to
+              ActionHandler { context ->
+                ScriptDbManager.reportActivation(context.payload)
+                null
               },
           "scriptStorage" to
               ActionHandler { context ->
@@ -141,4 +156,12 @@ object ScriptActions : ActionGroup {
                 callback
               },
       )
+
+  private fun chinese(): Boolean = Locale.getDefault().language.lowercase().startsWith("zh")
+
+  private fun invalidScriptMessage(): String =
+      if (chinese()) "无效的用户脚本" else "Invalid UserScript"
+
+  private fun installFailedMessage(): String =
+      if (chinese()) "安装失败：无法写入脚本库" else "Install failed: cannot write to the script library"
 }

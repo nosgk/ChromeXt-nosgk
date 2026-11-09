@@ -9,6 +9,8 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 import org.json.JSONArray
 import org.json.JSONObject
+import org.matrix.chromext.script.ScriptFiles
+import org.matrix.chromext.script.ScriptHydrator
 import org.matrix.chromext.script.ScriptRecord
 import org.matrix.chromext.script.ScriptStore
 import org.matrix.chromext.script.parseScript
@@ -67,15 +69,22 @@ object Backup {
                     } else if (name.endsWith(".user.js")) {
                       val text = zip.readBytes().toString(Charsets.UTF_8)
                       val parsed = parseScript(text, null, hydrateRequires = false)
-                      if (parsed != null &&
-                          store.upsert(
-                              parsed.copy(lastUpdated = System.currentTimeMillis()).toRecord())) {
-                        count += 1
+                      if (parsed != null) {
+                        val hydrated =
+                            ScriptHydrator.hydrate(
+                                context, parsed.copy(lastUpdated = System.currentTimeMillis()))
+                        if (store.upsert(hydrated.toRecord())) count += 1
                       }
                     }
                     zip.closeEntry()
                     entry = zip.nextEntry
                   }
+                }
+                if (count > 0) {
+                  store.records().forEach {
+                    runCatching { ScriptFiles.mirrorScript(context, store, it) }
+                  }
+                  runCatching { ScriptFiles.writeManifest(context, store) }
                 }
               } finally {
                 store.close()

@@ -6,7 +6,6 @@ import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.text.Regex
 import org.json.JSONObject
-import org.matrix.chromext.Chrome
 
 private val blocksReg =
     Regex(
@@ -16,7 +15,7 @@ private val metaReg = Regex("""^//\s+@(?<key>[\w-]+)(\s+(?<value>.+))?""")
 fun parseScript(
     input: String,
     storage: String? = null,
-    hydrateRequires: Boolean = true,
+    @Suppress("UNUSED_PARAMETER") hydrateRequires: Boolean = false,
 ): Script? {
   val blockMatchGroup = blocksReg.matchEntire(input)?.groups
   if (blockMatchGroup == null) {
@@ -31,6 +30,7 @@ fun parseScript(
         var grant = mutableListOf<String>()
         var exclude = mutableListOf<String>()
         var require = mutableListOf<String>()
+        var resources = mutableListOf<ScriptResource>()
         var version = ""
         var author = ""
         var description = ""
@@ -56,6 +56,14 @@ fun parseScript(
           "grant" -> script.grant.add(value)
           "exclude" -> script.exclude.add(value)
           "require" -> script.require.add(value)
+          "resource" -> {
+            val parts = value.split(Regex("""\s+""")).filter { it.isNotBlank() }
+            if (parts.isNotEmpty()) {
+              val url = parts.getOrNull(1).orEmpty().substringBefore("#")
+              script.resources.add(
+                  ScriptResource(name = parts[0], url = url, mime = guessMime(parts[0])))
+            }
+          }
           "version" -> script.version = value
           "author" -> script.author = value
           "description" -> script.description = value
@@ -89,10 +97,9 @@ fun parseScript(
   if (script.match.size == 0) {
     return null
   } else {
+    // `@require` and `@resource` payloads are hydrated at install time by ScriptHydrator; parsing
+    // stays pure so a database read never blocks on the network.
     val lib = mutableListOf<String>()
-    if (hydrateRequires) {
-      Chrome.IO.submit { script.require.forEach { runCatching { lib.add(downloadLib(it)) } } }
-    }
     // Keep the stored parameters inside the values the injector understands: an unknown @run-at
     // would otherwise silently fall back in GM.js, and a non-http update URL can never be fetched.
     val runAt =
@@ -121,12 +128,33 @@ fun parseScript(
             author = script.author,
             description = script.description,
             runAt = runAt,
+            resources = script.resources.distinctBy { it.name },
         )
     return parsed
   }
 }
 
-private fun downloadLib(libUrl: String): String {
+/** Minimal MIME hint for `@resource` entries; used for blob URLs and the Download mirror. */
+fun guessMime(name: String): String =
+    when (name.substringAfterLast('.', "").lowercase()) {
+      "js" -> "text/javascript"
+      "css" -> "text/css"
+      "json" -> "application/json"
+      "html", "htm" -> "text/html"
+      "txt" -> "text/plain"
+      "png" -> "image/png"
+      "jpg", "jpeg" -> "image/jpeg"
+      "gif" -> "image/gif"
+      "svg" -> "image/svg+xml"
+      "webp" -> "image/webp"
+      "woff" -> "font/woff"
+      "woff2" -> "font/woff2"
+      else -> "application/octet-stream"
+    }
+
+internal const val MAX_HYDRATE_BYTES = 4 * 1024 * 1024
+
+internal fun downloadLib(libUrl: String): String {
   if (libUrl.startsWith("data:")) {
     val chunks = libUrl.split(",").toMutableList()
     val type = chunks.removeAt(0)
@@ -137,11 +165,37 @@ private fun downloadLib(libUrl: String): String {
       return data
     }
   }
-  val url = URL(libUrl)
-  val protocol = url.protocol.lowercase()
-  require(protocol == "http" || protocol == "https") {
-    "Unsupported @require scheme: $protocol"
+  return String(downloadBytes(libUrl), Charsets.UTF_8)
+}
+
+/** Downloads a `@require`/`@resource` payload with a timeout and a hard size cap. */
+internal fun downloadBytes(url: String): ByteArray {
+  if (url.startsWith("data:")) {
+    val chunks = url.split(",").toMutableList()
+    val type = chunks.removeAt(0)
+    val data = Uri.decode(chunks.joinToString(""))
+    return if (type.endsWith("base64")) Base64.decode(data, Base64.DEFAULT)
+    else data.toByteArray(Charsets.UTF_8)
   }
-  val connection = url.openConnection() as HttpURLConnection
-  return connection.inputStream.bufferedReader().use { it.readText() }
+  val parsed = URL(url)
+  val protocol = parsed.protocol.lowercase()
+  require(protocol == "http" || protocol == "https") {
+    "Unsupported scheme: $protocol"
+  }
+  val connection = parsed.openConnection() as HttpURLConnection
+  connection.connectTimeout = 15_000
+  connection.readTimeout = 15_000
+  return connection.inputStream.use { input ->
+    val output = java.io.ByteArrayOutputStream()
+    val buffer = ByteArray(8192)
+    var total = 0
+    while (true) {
+      val read = input.read(buffer)
+      if (read < 0) break
+      total += read
+      require(total <= MAX_HYDRATE_BYTES) { "Resource is larger than 4 MiB" }
+      output.write(buffer, 0, read)
+    }
+    output.toByteArray()
+  }
 }

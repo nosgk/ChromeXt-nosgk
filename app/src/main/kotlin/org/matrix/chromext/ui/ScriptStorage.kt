@@ -1,11 +1,10 @@
 package org.matrix.chromext.ui
 
 import android.content.Context
-import android.database.sqlite.SQLiteDatabase
 import java.io.File
 import java.util.concurrent.TimeUnit
-import org.matrix.chromext.script.ScriptRecord
-import org.matrix.chromext.script.parseScript
+import org.matrix.chromext.script.LegacyDatabase
+import org.matrix.chromext.script.LegacyReadResult
 import org.matrix.chromext.utils.Log
 import org.matrix.chromext.utils.Su
 
@@ -20,21 +19,14 @@ data class LocalScriptDatabase(
     val exists: Boolean = false,
 )
 
-data class ImportOutcome(
-    val imported: Int = 0,
-    val skipped: Int = 0,
-    val invalid: Int = 0,
-    val error: String? = null,
-)
-
 /**
- * Finds and imports the per-browser `userscript` databases.
+ * Finds and reads the per-browser `userscript` databases.
  *
  * The upstream ChromeXt stores scripts in each browser's own SQLite file
  * (`/data/user/0/<pkg>/databases/userscript`). This fork keeps them in a central database in the
  * module, so scripts installed before switching builds are invisible until they are migrated. The
- * browser process migrates itself on first run; this reader lets the manager do the same thing
- * immediately with root, and also shows the real paths on the device.
+ * browser process imports its own file once (read-only) on first run; this reader lets the manager
+ * do the same immediately with root, and also shows the real paths on the device.
  */
 data class ScanOutcome(
     val databases: List<LocalScriptDatabase>,
@@ -157,86 +149,37 @@ object ScriptStorage {
   }
 
   /**
-   * Copies one browser database and inserts every row that is not in the central database yet.
-   * [insert] returns true when the row was actually inserted (false means it already existed).
+   * Copies one browser database to the app cache and parses its rows. Nothing is written back to
+   * the browser; the caller decides which scripts to import.
    */
-  fun import(
-      context: Context,
-      database: LocalScriptDatabase,
-      insert: (ScriptRecord) -> Boolean,
-  ): ImportOutcome {
-    if (!database.exists) return ImportOutcome(error = "not found")
+  fun read(context: Context, database: LocalScriptDatabase): LegacyReadResult {
+    if (!database.exists) return LegacyReadResult(emptyList(), error = "not found")
     val directory = File(context.cacheDir, "import").apply { mkdirs() }
     directory.listFiles()?.forEach { runCatching { it.delete() } }
     val target = File(directory, DB_NAME)
     if (!copyFile(database.path, target, requireSqliteHeader = true)) {
-      return ImportOutcome(error = "copy failed")
+      return LegacyReadResult(emptyList(), error = "copy failed")
     }
     copyFile("${database.path}-wal", File(target.path + "-wal"), requireSqliteHeader = false)
     copyFile("${database.path}-shm", File(target.path + "-shm"), requireSqliteHeader = false)
-
-    return runCatching {
-          SQLiteDatabase.openDatabase(target.path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
-            val columns = mutableSetOf<String>()
-            db.rawQuery("PRAGMA table_info(script)", null).use { cursor ->
-              while (cursor.moveToNext()) {
-                columns += cursor.getString(cursor.getColumnIndexOrThrow("name"))
-              }
-            }
-            if ("id" !in columns || "meta" !in columns || "code" !in columns) {
-              return ImportOutcome(error = "unknown schema")
-            }
-            var imported = 0
-            var skipped = 0
-            var invalid = 0
-            db.rawQuery("SELECT * FROM script", null).use { cursor ->
-              while (cursor.moveToNext()) {
-                fun text(name: String, default: String = ""): String {
-                  if (name !in columns) return default
-                  val index = cursor.getColumnIndex(name)
-                  return if (index < 0 || cursor.isNull(index)) default else cursor.getString(index)
-                }
-                fun number(name: String, default: Long): Long {
-                  if (name !in columns) return default
-                  val index = cursor.getColumnIndex(name)
-                  return if (index < 0 || cursor.isNull(index)) default else cursor.getLong(index)
-                }
-                val record =
-                    ScriptRecord(
-                        id = text("id"),
-                        meta = text("meta"),
-                        code = text("code"),
-                        storage = if ("storage" in columns) text("storage").ifBlank { null } else null,
-                        enabled = number("enabled", 1L) != 0L,
-                        sortOrder = number("sort_order", 0L).toInt(),
-                        customMatch = text("custom_match"),
-                        customInclude = text("custom_include"),
-                        customExclude = text("custom_exclude"),
-                        customRunAt = text("custom_run_at"),
-                        updateUrl = text("update_url"),
-                        iconUrl = text("icon_url"),
-                        lastUpdated = number("last_updated", 0L),
-                        apps = text("apps"),
-                    )
-                if (record.id.isBlank() ||
-                    parseScript(record.meta + record.code, record.storage, hydrateRequires = false) ==
-                        null) {
-                  invalid += 1
-                } else if (insert(record)) {
-                  imported += 1
-                } else {
-                  skipped += 1
-                }
-              }
-            }
-            ImportOutcome(imported = imported, skipped = skipped, invalid = invalid)
-          }
-        }
-        .getOrElse {
-          Log.d("Import from ${database.path} failed: ${it.message}")
-          ImportOutcome(error = it.message ?: "read failed")
-        }
+    return LegacyDatabase.read(target.path)
   }
+
+  /** Reads a database the user picked with the system file picker. */
+  fun read(context: Context, uri: android.net.Uri): LegacyReadResult =
+      runCatching {
+            val directory = File(context.cacheDir, "import").apply { mkdirs() }
+            directory.listFiles()?.forEach { runCatching { it.delete() } }
+            val target = File(directory, DB_NAME)
+            context.contentResolver.openInputStream(uri)?.use { input ->
+              target.outputStream().use { output -> input.copyTo(output) }
+            } ?: return LegacyReadResult(emptyList(), error = "cannot open file")
+            LegacyDatabase.read(target.path)
+          }
+          .getOrElse {
+            Log.d("Reading the imported database failed: ${it.message}")
+            LegacyReadResult(emptyList(), error = it.message ?: "read failed")
+          }
 
   private data class SuResult(
       val output: String,

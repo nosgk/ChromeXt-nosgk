@@ -454,6 +454,13 @@ function GM_listValues() {
 // Kotlin separator
 
 function GM_getResourceText(name) {
+  const local = (GM_info.script.resourceData || {})[name];
+  if (local && local.base64) {
+    const binary = atob(local.base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
   return (
     GM_info.script.resources.find((it) => it.name == name).content ||
     "ChromeXt failed to find resource " + name
@@ -462,10 +469,20 @@ function GM_getResourceText(name) {
 // Kotlin separator
 
 function GM_getResourceURL(name) {
-  return (
-    GM_info.script.resources.find((it) => it.name == name).url ||
-    "ChromeXt failed to find resource " + name
-  );
+  const resource = GM_info.script.resources.find((it) => it.name == name);
+  const local = (GM_info.script.resourceData || {})[name];
+  if (local && local.base64) {
+    if (!resource.blobUrl) {
+      const binary = atob(local.base64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      resource.blobUrl = URL.createObjectURL(
+        new Blob([bytes], { type: local.mime || "application/octet-stream" })
+      );
+    }
+    return resource.blobUrl;
+  }
+  return resource ? resource.url : "ChromeXt failed to find resource " + name;
 }
 // Kotlin separator
 
@@ -1267,15 +1284,41 @@ GM.bootstrap = () => {
   function runScript(meta) {
     Object.freeze(storageHandler);
     GM_info.storage = new Proxy(storageHandler.storage, storageHandler);
-    if (typeof GM_xmlhttpRequest == "function" && meta.resources.length > 0) {
+    const localResources = GM_info.script.resourceData || {};
+    meta.resources.forEach((data) => {
+      const local = localResources[data.name];
+      if (local && local.base64) {
+        const binary = atob(local.base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        data.mime = local.mime;
+        data.content = new TextDecoder().decode(bytes);
+      }
+    });
+    if (
+      typeof GM_xmlhttpRequest == "function" &&
+      meta.resources.some((data) => data.content == undefined)
+    ) {
       meta.sync_code = meta.code;
       meta.code = async () => {
         for (const data of meta.resources) {
-          data.content = await GM_xmlhttpRequest({ url: data.url });
+          if (data.content == undefined) {
+            data.content = await GM_xmlhttpRequest({ url: data.url });
+          }
         }
         return meta.sync_code();
       };
     }
+
+    // Report the real activation point: the wrapper runs right before the script body starts, not
+    // when a document-end/document-idle script was merely scheduled.
+    const scriptBody = meta.code;
+    meta.code = function () {
+      try {
+        ChromeXt.dispatch("scriptActive", meta.id);
+      } catch (e) {}
+      return scriptBody.apply(this, arguments);
+    };
 
     switch (meta["run-at"]) {
       case "document-start":

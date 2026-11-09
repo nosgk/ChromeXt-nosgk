@@ -239,7 +239,9 @@
 	<string name="settings_engine_privileged">Allow privileged dispatch</string>
 	<string name="settings_engine_privileged_hint">Let scripts declaring @grant GM.ChromeXt call ChromeXt.dispatch</string>
 	<string name="settings_engine_install_confirm">Confirm before installing</string>
-	<string name="settings_engine_install_confirm_hint">Show the confirmation screen when installing from a page; off installs directly</string>
+	<string name="settings_engine_install_confirm_hint">Open the native review screen when installing from a page; off installs directly and stays on the page</string>
+	<string name="settings_engine_resource_cache">Local resource mirror</string>
+	<string name="settings_engine_resource_cache_hint">Serve GM_xmlhttpRequest GETs from Download/ChromeXT/resources first and cache successful responses locally</string>
 	<string name="settings_engine_pending">Changes apply when the browser next syncs</string>
 	<string name="settings_data">Data and backup</string>
 	<string name="settings_export_short">Export (.zip)</string>
@@ -258,10 +260,12 @@
 	<string name="settings_restart_failed">Root restart failed; opened the app info page for %1$s</string>
 
 	<!-- Script storage -->
-	<string name="settings_storage_title">Script storage</string>
-	<string name="settings_storage_central">Central database</string>
+	<string name="settings_storage_title">Script library migration</string>
+	<string name="settings_storage_unified">Unified script directory</string>
+	<string name="settings_storage_resources">%1$d resources · %2$s</string>
+	<string name="settings_storage_central">Central database (module private)</string>
 	<string name="settings_storage_scripts">%1$d scripts</string>
-	<string name="settings_storage_local">Browser local databases</string>
+	<string name="settings_storage_local">Upstream browser databases</string>
 	<string name="settings_storage_scan">Scan</string>
 	<string name="settings_storage_scanning">Scanning…</string>
 	<string name="settings_storage_import">Import</string>
@@ -272,14 +276,28 @@
 	<string name="settings_storage_modified">modified %1$s</string>
 	<string name="settings_storage_imported">Imported %1$d, skipped %2$d, invalid %3$d</string>
 	<string name="settings_storage_import_failed">Import failed: %1$s</string>
-	<string name="settings_storage_none">No local database to import</string>
+	<string name="settings_storage_none">No scripts to import</string>
 	<string name="settings_storage_no_browser">No supported browser is installed</string>
 	<string name="settings_storage_no_root">Could not run su. Make sure ChromeXt is granted root access.</string>
-	<string name="settings_storage_not_found_hint">No local database was found. If the upstream ChromeXt did install scripts, open that browser once so it creates the database, or import it by path below.</string>
-	<string name="settings_storage_manual">Manual import</string>
-	<string name="settings_storage_manual_title">Import a database by path</string>
-	<string name="settings_storage_manual_hint">Enter the full path of a browser userscript database.</string>
-	<string name="settings_storage_manual_path">/data/user/0/&lt;pkg&gt;/databases/userscript</string>
-	<string name="settings_storage_manual_label">Manual database</string>
-	<string name="settings_storage_hint">Scripts installed by the upstream ChromeXt live in the userscript database of each browser. Import them here to see them in this fork.</string>
+	<string name="settings_storage_not_found_hint">No local database was found. If the upstream ChromeXt did install scripts, open that browser once so it creates the database, or use “Import from file” to pick the database file.</string>
+	<string name="settings_storage_pick_file">Import from file</string>
+	<string name="settings_storage_hint">Scripts live under Download/ChromeXT/: userscript holds .user.js mirrors, resources holds @require/@resource payloads and the runtime cache. The central database stays in the module's private directory; browsers no longer write their own userscript database.</string>
+	<string name="settings_activated_count">%1$d activated</string>
+
+	<!-- Import preview -->
+	<string name="import_preview_title">Confirm the scripts to import</string>
+	<string name="import_preview_summary">%1$d valid scripts, %2$d invalid rows</string>
+	<string name="import_select_all">Select all</string>
+	<string name="import_select_none">Select none</string>
+	<string name="import_overwrite">Overwrite existing scripts</string>
+	<string name="import_existing">Already exists</string>
+	<string name="import_match_count">%1$d match rules</string>
+	<string name="import_confirm">Import %1$d</string>
+	<string name="import_invalid_hint">%1$d more rows could not be parsed and will be skipped.</string>
+	<string name="install_already_saved">Already saved to the script library; confirm, edit or disable it here.</string>
+	<string name="toggle_saved">Saved; the browser applies it on the next page load</string>
+	<string name="toggle_failed">Save failed. Make sure the module process is not restricted.</string>
+	<string name="script_activated">Activated · %1$s · %2$s</string>
+	<string name="script_not_activated">Not activated</string>
+	<string name="apps_activated">%1$d scripts activated</string>
 </resources>

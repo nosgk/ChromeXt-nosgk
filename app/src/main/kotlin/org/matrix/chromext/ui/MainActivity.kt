@@ -23,6 +23,7 @@ class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     requestNotificationPermission()
+    requestLegacyStoragePermission()
     val activeUrl = intent?.getStringExtra(EXTRA_ACTIVE_URL)
     val editId = intent?.getStringExtra(EXTRA_EDIT_ID)
     setContent {
@@ -56,6 +57,15 @@ class MainActivity : ComponentActivity() {
         checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED) {
       requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+    }
+  }
+
+  /** Android 9 and older write the Download/ChromeXT mirror with a plain File. */
+  private fun requestLegacyStoragePermission() {
+    if (Build.VERSION.SDK_INT in Build.VERSION_CODES.M..Build.VERSION_CODES.P &&
+        checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) !=
+            PackageManager.PERMISSION_GRANTED) {
+      requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 2)
     }
   }
 

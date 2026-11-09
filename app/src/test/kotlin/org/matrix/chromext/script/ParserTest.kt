@@ -120,4 +120,26 @@ class ParserTest {
     assertEquals(1, script.match.size)
     assertEquals(1, script.grant.count { it == "GM_setValue" })
   }
+
+  @Test
+  fun parsesResourcesAndStripsIntegrityHashes() {
+    val input =
+        """
+        // ==UserScript==
+        // @name Resources
+        // @match https://example.com/*
+        // @resource style https://example.com/style.css
+        // @resource logo https://example.com/logo.png#sha256-abc
+        // ==/UserScript==
+        """
+            .trimIndent()
+    val script = parseScript(input)!!
+    assertEquals(2, script.resources.size)
+    assertEquals("style", script.resources[0].name)
+    assertEquals("https://example.com/style.css", script.resources[0].url)
+    assertEquals("text/css", script.resources[0].mime)
+    assertEquals("https://example.com/logo.png", script.resources[1].url)
+    assertEquals("image/png", script.resources[1].mime)
+    assertNull(script.resources[0].data)
+  }
 }

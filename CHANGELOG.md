@@ -2,6 +2,31 @@
 
 All notable changes to this fork are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the module's `versionName`.
 
+## [3.15.0] - 2026-11-09
+
+### Added
+
+- Real activation status. `GM.js` reports `scriptActive` right before a script body runs (not when it is scheduled), the browser batches the reports and the manager shows “已激活 · <host> · <time>” on the script card and per-app counts. Schema v13 adds `script_activation`.
+- Unified script directory `Download/ChromeXT/`: `userscript/<name>.user.js` mirrors, `resources/<script>/...` for `@require`/`@resource`, `resources/http/<host>/<path>` for the runtime cache, plus `manifest.json`. Writes go through `MediaStore.Downloads` on Android 10+ and the legacy `Download` directory on older releases.
+- Import preview: the “脚本存储库迁徙” card can pick an upstream SQLite database or a `.user.js` with the system file picker, lists every contained script, lets the user deselect rows and optionally overwrite existing ids, and only then writes. The root scan and “import all” use the same preview.
+- Local resource mirror for `GM_xmlhttpRequest`: GET requests are answered from `Download/ChromeXT/resources` when present, and successful responses are cached there (new “资源本地镜像” engine switch, on by default). `GM_getResourceText`/`GM_getResourceURL` read the payloads hydrated at install time; `GM_getResourceURL` returns a `blob:` URL.
+- `ScriptHydrator` downloads `@require` and `@resource` while installing/importing (15 s timeout, 4 MiB per file) instead of fetching them on every database read.
+
+### Fixed
+
+- The in-page install dialog sometimes never appeared: `editor.js` only looked at `body > pre`, so a `textarea`/`div` renderer or any extra `div/p` aborted silently; sandboxed pages recursed synchronously; and `.user.js?v=…` links were not recognised at all. The code element is now located defensively, the dialog is always created, retries are bounded, and `isUserScript()` ignores query strings/fragments and case.
+- Tapping “确认” could neither open the manager nor install the script: `startActivity` was treated as success even when OEM background limits silently dropped it. The script is now stored first, the native screen is a review step, and a notification with a `PendingIntent.getActivity` is posted when the activity cannot be launched.
+- The script enable switch appeared to do nothing: the browser could still read its own database, and it only refreshed on `onResume`/after the 30 s throttle. The central database is now the only authority, every write bumps `config.scripts_revision`, and browsers refresh on the next page load when the revision changed. A failed write reverts the switch and shows an error.
+- Scripts were stored in two different files named `userscript` (`/data/user/0/org.matrix.chromext/...` and `/data/user/0/<browser>/...`), and the browser mirror could overwrite the central state. The module database is now `chromext.db` (migrated in place), browser processes never write their legacy database, and the first run imports it read-only with `insertIfAbsent`.
+- The install editor and invalid-script alert are localized instead of hard-coded English.
+- Large scripts (Pagetual is ~800 KB) and the whole script list no longer travel through a Binder `Bundle`, whose transaction limit is ~1 MB: the provider serves the script snapshot and resource cache through `openFile()` file descriptors, and the browser uploads large records to an inbox file before `upsertScript`/`migrateLegacyScripts`. This also explains why installing a large script could silently fail and why central toggles never reached the browser.
+
+### Changed
+
+- `parseScript()` no longer performs network I/O; `@require` hydration moved to install/import time.
+- Settings card “脚本存储” → “脚本存储库迁徙”, “浏览器本地数据库” → “上游浏览器数据库”, “手动导入” → “从文件导入”.
+- Schema v13 adds `script.lib`, `script.resources`, `script_activation` and `file_mirror`.
+
 ## [3.14.2] - 2026-11-09
 
 ### Fixed
@@ -169,7 +194,8 @@ All notable changes to this fork are documented here. The format follows [Keep a
 - Support for the MVC page menu design.
 - Loading-state tracking for browsers where `mIsLoading` cannot be located.
 
-[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.14.2...HEAD
+[Unreleased]: https://github.com/nosgk/ChromeXt-nosgk/compare/v3.15.0...HEAD
+[3.15.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.15.0
 [3.14.2]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.14.2
 [3.14.1]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.14.1
 [3.14.0]: https://github.com/nosgk/ChromeXt-nosgk/releases/tag/v3.14.0

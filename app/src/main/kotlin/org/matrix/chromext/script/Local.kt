@@ -88,7 +88,21 @@ object GM {
 
     grants += localScript.get("GM.bootstrap")!!
     val GM_info = JSONObject(mapOf("scriptMetaStr" to meta))
-    GM_info.put("script", JSONObject().put("id", script.id))
+    val scriptInfo = JSONObject().put("id", script.id)
+    if (script.resources.any { it.data != null }) {
+      val resourceData = JSONObject()
+      script.resources.forEach { resource ->
+        val data = resource.data ?: return@forEach
+        resourceData.put(
+            resource.name,
+            JSONObject().apply {
+              put("mime", resource.mime.ifBlank { guessMime(resource.name) })
+              put("base64", data)
+            })
+      }
+      scriptInfo.put("resourceData", resourceData)
+    }
+    GM_info.put("script", scriptInfo)
     if (script.storage != null) GM_info.put("storage", script.storage)
     code = "\ndelete window.__loading__;\n${code};"
     code = localScript.get("globalThis")!! + script.lib.joinToString("\n") + code

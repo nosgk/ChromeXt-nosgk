@@ -239,7 +239,9 @@
 	<string name="settings_engine_privileged">开放底层 Dispatch 接口</string>
 	<string name="settings_engine_privileged_hint">允许声明 @grant GM.ChromeXt 的脚本调用 ChromeXt.dispatch</string>
 	<string name="settings_engine_install_confirm">安装前确认</string>
-	<string name="settings_engine_install_confirm_hint">从网页安装脚本时先显示确认页；关闭后直接安装</string>
+	<string name="settings_engine_install_confirm_hint">从网页安装脚本时打开原生复查页；关闭后直接安装并停留当前页面</string>
+	<string name="settings_engine_resource_cache">资源本地镜像</string>
+	<string name="settings_engine_resource_cache_hint">GM_xmlhttpRequest 的 GET 请求优先使用 Download/ChromeXT/resources 中的镜像，并把成功响应缓存到本地</string>
 	<string name="settings_engine_pending">修改会在浏览器下次同步时生效</string>
 	<string name="settings_data">数据与备份</string>
 	<string name="settings_export_short">导出（.zip）</string>
@@ -258,10 +260,12 @@
 	<string name="settings_restart_failed">root 重启失败，已打开 %1$s 的应用信息页</string>
 
 	<!-- 脚本存储 -->
-	<string name="settings_storage_title">脚本存储</string>
-	<string name="settings_storage_central">中央数据库</string>
+	<string name="settings_storage_title">脚本存储库迁徙</string>
+	<string name="settings_storage_unified">统一脚本目录</string>
+	<string name="settings_storage_resources">%1$d 个资源 · %2$s</string>
+	<string name="settings_storage_central">中央数据库（模块私有）</string>
 	<string name="settings_storage_scripts">%1$d 个脚本</string>
-	<string name="settings_storage_local">浏览器本地数据库</string>
+	<string name="settings_storage_local">上游浏览器数据库</string>
 	<string name="settings_storage_scan">扫描</string>
 	<string name="settings_storage_scanning">正在扫描…</string>
 	<string name="settings_storage_import">导入</string>
@@ -272,14 +276,28 @@
 	<string name="settings_storage_modified">修改时间 %1$s</string>
 	<string name="settings_storage_imported">已导入 %1$d 个，跳过 %2$d 个，无效 %3$d 个</string>
 	<string name="settings_storage_import_failed">导入失败：%1$s</string>
-	<string name="settings_storage_none">没有可导入的本地数据库</string>
+	<string name="settings_storage_none">没有可导入的脚本</string>
 	<string name="settings_storage_no_browser">没有安装受支持的浏览器</string>
 	<string name="settings_storage_no_root">无法执行 su，请确认已授予 ChromeXt root 权限</string>
-	<string name="settings_storage_not_found_hint">没有找到本地数据库。如果确认上游 ChromeXt 装过脚本，请先打开一次对应浏览器让它创建数据库，或在下方手动按路径导入。</string>
-	<string name="settings_storage_manual">手动导入</string>
-	<string name="settings_storage_manual_title">按路径导入数据库</string>
-	<string name="settings_storage_manual_hint">输入浏览器 userscript 数据库的完整路径。</string>
-	<string name="settings_storage_manual_path">/data/user/0/&lt;pkg&gt;/databases/userscript</string>
-	<string name="settings_storage_manual_label">手动导入的数据库</string>
-	<string name="settings_storage_hint">上游 ChromeXt 安装的脚本保存在各浏览器自己的 userscript 数据库中；在这里导入后即可在本分支看到。</string>
+	<string name="settings_storage_not_found_hint">没有找到本地数据库。如果确认上游 ChromeXt 装过脚本，请先打开一次对应浏览器让它创建数据库，或使用“从文件导入”选择数据库文件。</string>
+	<string name="settings_storage_pick_file">从文件导入</string>
+	<string name="settings_storage_hint">脚本统一存放在 Download/ChromeXT/：userscript 为 .user.js 镜像，resources 为 @require/@resource 与运行时缓存。中央数据库只保留在模块私有目录，浏览器不再写入自己的 userscript 库。</string>
+	<string name="settings_activated_count">已激活 %1$d</string>
+
+	<!-- 导入预览 -->
+	<string name="import_preview_title">确认要导入的脚本</string>
+	<string name="import_preview_summary">共 %1$d 个有效脚本，%2$d 个无效行</string>
+	<string name="import_select_all">全选</string>
+	<string name="import_select_none">全不选</string>
+	<string name="import_overwrite">覆盖同名脚本</string>
+	<string name="import_existing">已存在</string>
+	<string name="import_match_count">%1$d 条匹配规则</string>
+	<string name="import_confirm">导入 %1$d 个</string>
+	<string name="import_invalid_hint">另有 %1$d 行无法解析，将被跳过。</string>
+	<string name="install_already_saved">已保存到脚本库，可在此确认、编辑或停用。</string>
+	<string name="toggle_saved">已保存，浏览器下次加载页面时生效</string>
+	<string name="toggle_failed">保存失败，请确认模块进程未被系统限制</string>
+	<string name="script_activated">已激活 · %1$s · %2$s</string>
+	<string name="script_not_activated">未激活</string>
+	<string name="apps_activated">已激活 %1$d 个脚本</string>
 </resources>

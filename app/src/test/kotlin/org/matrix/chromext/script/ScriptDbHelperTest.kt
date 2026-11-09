@@ -28,13 +28,15 @@ class ScriptDbHelperTest {
   }
 
   @Test
-  fun createsTheV12Schema() {
+  fun createsTheV13Schema() {
     context.deleteDatabase(ScriptDbHelper.DATABASE_NAME)
     val helper = ScriptDbHelper(context)
     val db = helper.writableDatabase
     val columns = columnsOf(db, "script")
     val appColumns = columnsOf(db, "hooked_app")
     val configColumns = columnsOf(db, "config")
+    val activationColumns = columnsOf(db, "script_activation")
+    val mirrorColumns = columnsOf(db, "file_mirror")
     assertEquals(ScriptDbHelper.DATABASE_VERSION, db.version)
     helper.close()
     assertTrue(
@@ -54,10 +56,16 @@ class ScriptDbHelperTest {
                 "icon_url",
                 "last_updated",
                 "apps",
+                "lib",
+                "resources",
             )))
     assertTrue(
         appColumns.containsAll(setOf("package_name", "label", "version_name", "last_seen")))
     assertTrue(configColumns.containsAll(setOf("key", "value")))
+    assertTrue(
+        activationColumns.containsAll(
+            setOf("script_id", "package_name", "last_active", "count")))
+    assertTrue(mirrorColumns.containsAll(setOf("script_id", "uri", "path")))
   }
 
   @Test
@@ -77,7 +85,7 @@ class ScriptDbHelperTest {
 
     val helper = ScriptDbHelper(context)
     val db = helper.readableDatabase
-    assertEquals(12, db.version)
+    assertEquals(13, db.version)
     db.rawQuery("SELECT id, storage, enabled, sort_order, apps FROM script ORDER BY id", null).use {
         cursor ->
       assertTrue(cursor.moveToFirst())
@@ -124,7 +132,7 @@ class ScriptDbHelperTest {
 
     val helper = ScriptDbHelper(context)
     val db = helper.readableDatabase
-    assertEquals(12, db.version)
+    assertEquals(13, db.version)
     assertTrue(columnsOf(db, "script").contains("apps"))
     assertTrue(columnsOf(db, "hooked_app").contains("package_name"))
     db.rawQuery("SELECT apps FROM script WHERE id = 'a:kept'", null).use { cursor ->

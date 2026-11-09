@@ -43,6 +43,10 @@ data class ScriptRecord(
     val lastUpdated: Long,
     /** Comma separated package names; empty means every hooked app. */
     val apps: String = "",
+    /** JSON array of `@require` sources, hydrated at install time. */
+    val lib: String = "[]",
+    /** JSON array of `@resource` entries, hydrated at install time. */
+    val resources: String = "[]",
 ) {
   fun toJson(): JSONObject =
       JSONObject().apply {
@@ -60,6 +64,8 @@ data class ScriptRecord(
         put("iconUrl", iconUrl)
         put("lastUpdated", lastUpdated)
         put("apps", apps)
+        put("lib", lib)
+        put("resources", resources)
       }
 
   companion object {
@@ -79,6 +85,8 @@ data class ScriptRecord(
             iconUrl = json.optString("iconUrl"),
             lastUpdated = json.optLong("lastUpdated", 0L),
             apps = json.optString("apps"),
+            lib = json.optString("lib", "[]"),
+            resources = json.optString("resources", "[]"),
         )
   }
 }
@@ -99,16 +107,47 @@ fun Script.toRecord(): ScriptRecord =
         iconUrl = iconUrl,
         lastUpdated = lastUpdated,
         apps = encodeApps(apps),
+        lib = encodeLib(lib),
+        resources = encodeResources(resources),
     )
+
+/** Rebuilds the injection model, keeping every manager-side override stored in the row. */
+fun ScriptRecord.toScript(): Script? {
+  val parsed = parseScript(meta + code, storage, hydrateRequires = false) ?: return null
+  if (parsed.id != id) return null
+  return parsed.copy(
+      enabled = enabled,
+      sortOrder = sortOrder,
+      customMatch = customMatch,
+      customInclude = customInclude,
+      customExclude = customExclude,
+      customRunAt = customRunAt,
+      updateUrl = updateUrl,
+      iconUrl = iconUrl,
+      lastUpdated = lastUpdated,
+      apps = parseApps(apps),
+      lib = parseLib(lib),
+      resources = parseResources(resources),
+  )
+}
+
+/** Mirrored `.user.js` document in the public Download directory. */
+data class MirrorEntry(val scriptId: String, val uri: String, val path: String)
 
 /** Thin CRUD over the `script` table, usable from both the browser and the provider process. */
 class ScriptStore(context: Context) {
 
   private val appContext = context.applicationContext
-  private val helper = ScriptDbHelper(context)
 
-  fun records(): List<ScriptRecord> {
-    val db = helper.readableDatabase
+  init {
+    // Must run before the helper opens the file. The helper only renames the module's own database,
+    // never a browser's.
+    ScriptDbHelper.migrateLegacyFileName(appContext)
+  }
+
+  private val helper = ScriptDbHelper(appContext)
+
+  fun records(): List<ScriptRecord> {    val db = helper.readableDatabase
     // Do not rely on ORDER BY: an interrupted v9 -> v10 migration may leave the column missing,
     // while the reader can still fall back to defaults. Sort after reading instead.
     val cursor = db.query("script", null, null, null, null, null, null)
@@ -134,6 +173,8 @@ class ScriptStore(context: Context) {
                 iconUrl = cursor.string("icon_url"),
                 lastUpdated = cursor.long("last_updated", 0L),
                 apps = cursor.string("apps"),
+                lib = cursor.string("lib", "[]"),
+                resources = cursor.string("resources", "[]"),
             ))
       }
     } finally {
@@ -142,54 +183,31 @@ class ScriptStore(context: Context) {
     return result.sortedWith(compareBy({ it.sortOrder }, { it.id }))
   }
 
+  fun record(id: String): ScriptRecord? = records().firstOrNull { it.id == id }
+
   fun upsert(record: ScriptRecord): Boolean {
     val db = helper.writableDatabase
-    val values =
-        ContentValues().apply {
-          put("id", record.id)
-          put("meta", record.meta)
-          put("code", record.code)
-          put("storage", record.storage)
-          put("enabled", if (record.enabled) 1 else 0)
-          put("sort_order", record.sortOrder)
-          put("custom_match", record.customMatch)
-          put("custom_include", record.customInclude)
-          put("custom_exclude", record.customExclude)
-          put("custom_run_at", record.customRunAt)
-          put("update_url", record.updateUrl)
-          put("icon_url", record.iconUrl)
-          put("last_updated", record.lastUpdated)
-          put("apps", record.apps)
-        }
-    return db.insertWithOnConflict("script", null, values, SQLiteDatabase.CONFLICT_REPLACE) != -1L
+    val values = contentValues(record)
+    val ok = db.insertWithOnConflict("script", null, values, SQLiteDatabase.CONFLICT_REPLACE) != -1L
+    if (ok) bumpRevision(db)
+    return ok
   }
 
   /** Migration helper: never overwrite an existing row. */
   fun insertIfAbsent(record: ScriptRecord): Boolean {
     val db = helper.writableDatabase
-    val values =
-        ContentValues().apply {
-          put("id", record.id)
-          put("meta", record.meta)
-          put("code", record.code)
-          put("storage", record.storage)
-          put("enabled", if (record.enabled) 1 else 0)
-          put("sort_order", record.sortOrder)
-          put("custom_match", record.customMatch)
-          put("custom_include", record.customInclude)
-          put("custom_exclude", record.customExclude)
-          put("custom_run_at", record.customRunAt)
-          put("update_url", record.updateUrl)
-          put("icon_url", record.iconUrl)
-          put("last_updated", record.lastUpdated)
-          put("apps", record.apps)
-        }
-    return db.insertWithOnConflict("script", null, values, SQLiteDatabase.CONFLICT_IGNORE) != -1L
+    val values = contentValues(record)
+    val ok = db.insertWithOnConflict("script", null, values, SQLiteDatabase.CONFLICT_IGNORE) != -1L
+    if (ok) bumpRevision(db)
+    return ok
   }
 
   fun setEnabled(id: String, enabled: Boolean): Boolean {
+    val db = helper.writableDatabase
     val values = ContentValues().apply { put("enabled", if (enabled) 1 else 0) }
-    return helper.writableDatabase.update("script", values, "id = ?", arrayOf(id)) > 0
+    val ok = db.update("script", values, "id = ?", arrayOf(id)) > 0
+    if (ok) bumpRevision(db)
+    return ok
   }
 
   fun updateStorage(id: String, storage: String): Boolean {
@@ -197,13 +215,21 @@ class ScriptStore(context: Context) {
     return helper.writableDatabase.update("script", values, "id = ?", arrayOf(id)) > 0
   }
 
-  fun delete(id: String): Boolean =
-      helper.writableDatabase.delete("script", "id = ?", arrayOf(id)) > 0
+  fun delete(id: String): Boolean = delete(arrayOf(id)) > 0
 
   fun delete(ids: Array<String>): Int {
     if (ids.isEmpty()) return 0
+    val db = helper.writableDatabase
     val placeholders = ids.joinToString(",") { "?" }
-    return helper.writableDatabase.delete("script", "id IN ($placeholders)", ids)
+    val deleted = db.delete("script", "id IN ($placeholders)", ids)
+    if (deleted > 0) {
+      runCatching {
+        db.delete("script_activation", "script_id IN ($placeholders)", ids)
+        db.delete("file_mirror", "script_id IN ($placeholders)", ids)
+      }
+      bumpRevision(db)
+    }
+    return deleted
   }
 
   fun close() {
@@ -283,10 +309,115 @@ class ScriptStore(context: Context) {
         val row = ContentValues().apply { put("key", key); put("value", value) }
         db.insertWithOnConflict("config", null, row, SQLiteDatabase.CONFLICT_REPLACE)
       }
+      // Engine switches are pulled by the browser on a revision change as well, so a toggle
+      // applies on the next page load instead of waiting for onResume.
+      bumpRevision(db)
       db.setTransactionSuccessful()
     } finally {
       db.endTransaction()
     }
+  }
+
+  /** Monotonic counter bumped on every script write; browsers refresh only when it changes. */
+  fun revision(): Long {
+    val cursor =
+        helper.readableDatabase.query(
+            "config", arrayOf("value"), "key = ?", arrayOf(KEY_REVISION), null, null, null)
+    return cursor.use { if (it.moveToFirst()) it.getString(0)?.toLongOrNull() ?: 0L else 0L }
+  }
+
+  private fun bumpRevision(db: SQLiteDatabase) {
+    val next = revision() + 1
+    val values = ContentValues().apply { put("key", KEY_REVISION); put("value", next.toString()) }
+    db.insertWithOnConflict("config", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+  }
+
+  fun activations(): List<ScriptActivation> {
+    val cursor =
+        helper.readableDatabase.query(
+            "script_activation", null, null, null, null, null, null)
+    val result = mutableListOf<ScriptActivation>()
+    try {
+      while (cursor.moveToNext()) {
+        result.add(
+            ScriptActivation(
+                scriptId = cursor.string("script_id"),
+                packageName = cursor.string("package_name"),
+                lastActive = cursor.long("last_active", 0L),
+                count = cursor.long("count", 0L),
+            ))
+      }
+    } finally {
+      cursor.close()
+    }
+    return result
+  }
+
+  /** Upserts a batch of activation reports sent by a hooked browser process. */
+  fun reportActivations(rows: List<ScriptActivation>) {
+    if (rows.isEmpty()) return
+    val db = helper.writableDatabase
+    db.beginTransaction()
+    try {
+      rows.forEach { row ->
+        // ON CONFLICT ... DO UPDATE needs SQLite 3.24 (Android 11); read-modify-write works on
+        // every supported API level.
+        var lastActive = row.lastActive
+        var count = row.count
+        db.rawQuery(
+                "SELECT last_active, count FROM script_activation " +
+                    "WHERE script_id = ? AND package_name = ?",
+                arrayOf(row.scriptId, row.packageName))
+            .use { cursor ->
+              if (cursor.moveToFirst()) {
+                lastActive = maxOf(cursor.getLong(0), lastActive)
+                count += cursor.getLong(1)
+              }
+            }
+        val values =
+            ContentValues().apply {
+              put("script_id", row.scriptId)
+              put("package_name", row.packageName)
+              put("last_active", lastActive)
+              put("count", count)
+            }
+        db.insertWithOnConflict(
+            "script_activation", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+      }
+      db.setTransactionSuccessful()
+    } finally {
+      db.endTransaction()
+    }
+  }
+
+  fun mirrorEntry(scriptId: String): MirrorEntry? {
+    val cursor =
+        helper.readableDatabase.query(
+            "file_mirror", null, "script_id = ?", arrayOf(scriptId), null, null, null)
+    return cursor.use {
+      if (!it.moveToFirst()) null
+      else
+          MirrorEntry(
+              scriptId = it.string("script_id"),
+              uri = it.string("uri"),
+              path = it.string("path"),
+          )
+    }
+  }
+
+  fun putMirrorEntry(entry: MirrorEntry) {
+    val values =
+        ContentValues().apply {
+          put("script_id", entry.scriptId)
+          put("uri", entry.uri)
+          put("path", entry.path)
+        }
+    helper.writableDatabase.insertWithOnConflict(
+        "file_mirror", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+  }
+
+  fun deleteMirrorEntry(scriptId: String) {
+    helper.writableDatabase.delete("file_mirror", "script_id = ?", arrayOf(scriptId))
   }
 
   /** Physical size of the SQLite file, used by the settings telemetry card. */
@@ -322,6 +453,26 @@ class ScriptStore(context: Context) {
     return cleared
   }
 
+  private fun contentValues(record: ScriptRecord): ContentValues =
+      ContentValues().apply {
+        put("id", record.id)
+        put("meta", record.meta)
+        put("code", record.code)
+        put("storage", record.storage)
+        put("enabled", if (record.enabled) 1 else 0)
+        put("sort_order", record.sortOrder)
+        put("custom_match", record.customMatch)
+        put("custom_include", record.customInclude)
+        put("custom_exclude", record.customExclude)
+        put("custom_run_at", record.customRunAt)
+        put("update_url", record.updateUrl)
+        put("icon_url", record.iconUrl)
+        put("last_updated", record.lastUpdated)
+        put("apps", record.apps)
+        put("lib", record.lib)
+        put("resources", record.resources)
+      }
+
   private fun Cursor.string(name: String, default: String = ""): String {
     val index = getColumnIndex(name)
     return if (index < 0 || isNull(index)) default else getString(index)
@@ -340,5 +491,9 @@ class ScriptStore(context: Context) {
   private fun Cursor.long(name: String, default: Long): Long {
     val index = getColumnIndex(name)
     return if (index < 0 || isNull(index)) default else getLong(index)
+  }
+
+  companion object {
+    const val KEY_REVISION = "scripts_revision"
   }
 }

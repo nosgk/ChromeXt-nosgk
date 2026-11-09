@@ -57,6 +57,7 @@ import org.matrix.chromext.R
 import org.matrix.chromext.browser.BrowserCatalog
 import org.matrix.chromext.script.HookedApp
 import org.matrix.chromext.script.Script
+import org.matrix.chromext.script.ScriptActivation
 
 /** One row of the apps screen. */
 data class AppEntry(
@@ -139,6 +140,7 @@ fun AppsScreen(
     modifier: Modifier,
     apps: List<AppEntry>,
     scripts: List<Script>,
+    activations: Map<String, ScriptActivation>,
     loading: Boolean,
     refreshing: Boolean,
     includeAll: Boolean,
@@ -270,6 +272,10 @@ fun AppsScreen(
                     app = app,
                     total = scripts.count { it.appliesTo(app.packageName) },
                     enabled = scripts.count { it.appliesTo(app.packageName) && it.enabled },
+                    activated =
+                        scripts.count {
+                          it.appliesTo(app.packageName) && activations.containsKey(it.id)
+                        },
                     onClick = { onOpenApp(app.packageName) },
                 )
               }
@@ -316,7 +322,13 @@ private fun GlobalRow(scripts: List<Script>, enabled: Int, onClick: () -> Unit) 
 }
 
 @Composable
-private fun AppRow(app: AppEntry, total: Int, enabled: Int, onClick: () -> Unit) {
+private fun AppRow(
+    app: AppEntry,
+    total: Int,
+    enabled: Int,
+    activated: Int,
+    onClick: () -> Unit,
+) {
   Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
     Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
       if (app.icon != null) {
@@ -377,6 +389,13 @@ private fun AppRow(app: AppEntry, total: Int, enabled: Int, onClick: () -> Unit)
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (activated > 0) {
+          Text(
+              stringResource(R.string.apps_activated, activated),
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.primary,
+          )
+        }
         if (app.active) {
           Icon(
               Icons.Default.CheckCircle,

@@ -11,6 +11,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.matrix.chromext.Chrome
 import org.matrix.chromext.action.ActionState
+import org.matrix.chromext.script.CentralBridge
 import org.matrix.chromext.script.Local
 
 class XMLHttpRequest(
@@ -19,6 +20,8 @@ class XMLHttpRequest(
     uuid: Double,
     currentTab: Any?,
     frameId: String?,
+    /** When set, a successful GET is cached under this key in Download/ChromeXT/resources. */
+    cacheKey: String? = null,
 ) {
   val currentTab = currentTab
   val frameId = frameId
@@ -27,6 +30,12 @@ class XMLHttpRequest(
 
   var connection: HttpURLConnection? = null
   var cookies: List<HttpCookie>
+
+  private var cacheTarget = cacheKey
+  private val cacheBuffer = java.io.ByteArrayOutputStream()
+  private var cacheBytes = 0
+  private var status = 0
+  private var mime = ""
 
   val anonymous = request.optBoolean("anonymous")
   val binary = request.optBoolean("binary")
@@ -89,6 +98,8 @@ class XMLHttpRequest(
         }
 
         data.put("status", responseCode)
+        status = responseCode
+        mime = contentType ?: ""
         data.put("statusText", responseMessage)
         val headers = headerFields.filter { it.key != null }.mapValues { JSONArray(it.value) }
         data.put("headers", JSONObject(headers))
@@ -109,6 +120,16 @@ class XMLHttpRequest(
             bytes += b
           }
           if (bytes == 0) break
+          if (cacheTarget != null) {
+            if (cacheBytes + bytes <= MAX_CACHE_BYTES) {
+              cacheBuffer.write(buffer, 0, bytes)
+              cacheBytes += bytes
+            } else {
+              // Too large to mirror; stop accumulating.
+              cacheTarget = null
+              cacheBuffer.reset()
+            }
+          }
           val chunk =
               if (binary) {
                 Base64.encodeToString(buffer, 0, bytes, Base64.DEFAULT)
@@ -121,6 +142,11 @@ class XMLHttpRequest(
           data.remove("headers")
         }
         response("load", data)
+        val key = cacheTarget
+        if (key != null && status in 200..299 && cacheBytes > 0) {
+          val payload = cacheBuffer.toByteArray()
+          Chrome.IO.submit { CentralBridge.putResource(key, payload, mime) }
+        }
       }
           .onFailure {
             if (it is IOException) {
@@ -158,3 +184,7 @@ class XMLHttpRequest(
     }
   }
 }
+
+// The provider receives cached responses through a Bundle, which must stay well under the 1 MB
+// Binder transaction limit.
+private const val MAX_CACHE_BYTES = 512 * 1024

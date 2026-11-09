@@ -60,4 +60,13 @@ class UrlTest {
     assertFalse(isUserScript("https://github.com/user/repo/demo.user.js"))
     assertTrue(isUserScript("https://example.com/demo.user.js"))
   }
+
+  @Test
+  fun acceptsQueryStringsFragmentsAndCase() {
+    assertTrue(isUserScript("https://example.com/demo.user.js?v=2"))
+    assertTrue(isUserScript("https://example.com/demo.user.js#section"))
+    assertTrue(isUserScript("https://example.com/DEMO.USER.JS"))
+    assertTrue(isUserScript("https://example.com/demo.js?raw=1"))
+    assertFalse(isUserScript("https://example.com/page.html?file=demo.user.js"))
+  }
 }

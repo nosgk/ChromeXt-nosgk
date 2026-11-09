@@ -33,6 +33,11 @@
     <!-- END GENERATED BROWSERS -->
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Android 9 and older need this to mirror scripts into Download/ChromeXT; Android 10+
+         writes through MediaStore without a permission. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
     <!-- The manager process checks script update URLs; under LSPosed it does not inherit the
          browser's network permission. -->
     <uses-permission android:name="android.permission.INTERNET"/>
